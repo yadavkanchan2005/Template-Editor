@@ -1,0 +1,277 @@
+
+
+
+{
+  "shapes": [
+    {
+      "type": "rect",
+      "label": "Rectangle",
+      "category": "basic"
+    },
+    {
+      "type": "circle",
+      "label": "Circle",
+      "category": "basic"
+    },
+    {
+      "type": "triangle",
+      "label": "Triangle",
+      "category": "basic"
+    },
+    {
+      "type": "diamond",
+      "label": "Diamond",
+      "category": "basic"
+    },
+    {
+      "type": "star",
+      "label": "Star",
+      "category": "decorative"
+    },
+    {
+      "type": "heart",
+      "label": "Heart",
+      "category": "decorative"
+    }
+  ],
+
+
+  "frames": [
+  {
+    "url": "/images/frames/frame2.png",
+    "label": "Classic Frame",
+    "category": "frames"
+  },
+  {
+    "url": "/images/frames/accecories.png",
+    "label": "Modern Frame",
+    "category": "frames"
+  },
+  {
+    "url": "/images/frames/frame3.png",
+    "label": "Rounded Frame",
+    "category": "frames"
+  },
+  {
+    "url": "/images/frames/frame4.png",
+    "label": "Classic Frame",
+    "category": "frames"
+  },
+  {
+    "url": "/images/frames/frame5.png",
+    "label": "Modern Frame",
+    "category": "frames"
+  },  {
+    "url": "/images/frames/frame6.png",
+    "label": "Modern Frame",
+    "category": "frames"
+  },  {
+    "url": "/images/frames/frame7.png",
+    "label": "Modern Frame",
+    "category": "frames"
+  },  {
+    "url": "/images/frames/frame8.png",
+    "label": "Modern Frame",
+    "category": "frames"
+  },  {
+    "url": "/images/frames/frame9.png",
+    "label": "Modern Frame",
+    "category": "frames"
+  },  {
+    "url": "/images/frames/frame10.png",
+    "label": "Modern Frame",
+    "category": "frames"
+  }
+  ],
+
+
+
+
+  "flowers": [
+  {
+    "url": "/images/flowers/flower1.png",
+    "label": "Rose Flower",
+    "category": "flowers"
+  },
+  {
+    "url": "/images/flowers/sunflower.png",
+    "label": "sunflower Flower",
+    "category": "flowers"
+  },
+  {
+    "url": "/images/flowers/hibiscus.png",
+    "label": "Hibiscus Flower",
+    "category": "flowers"
+  },
+    {
+    "url": "/images/flowers/lotus.png",
+    "label": "Lotus Flower",
+    "category": "flowers"
+  },
+
+     {
+    "url": "/images/flowers/cherry-blossom.png",
+    "label": "Cherry-blossom Flower",
+    "category": "flowers"
+  },
+    {
+    "url": "/images/flowers/cute.png",
+    "label": "Cute Flower",
+    "category": "flowers"
+  },
+   {
+    "url": "/images/flowers/rose.png",
+    "label": "Rose Flower",
+    "category": "flowers"
+  },
+{
+    "url": "/images/flowers/flowers.png",
+    "label": "Yellow Flower",
+    "category": "flowers"
+  },
+
+  {
+    "url": "/images/flowers/lotus-flower.png",
+    "label": "lotus-flower",
+    "category": "flowers"
+  },
+
+  {
+    "url": "/images/flowers/lavender.png",
+    "label": "Lavender Flower",
+    "category": "flowers"
+  },
+
+  {
+    "url": "/images/flowers/flowers.png",
+    "label": "Yellow Flower",
+    "category": "flowers"
+  },
+
+  {
+    "url": "/images/flowers/wattle.png",
+    "label": "wattle Flower",
+    "category": "flowers"
+  },
+   {
+    "url": "/images/flowers/sabi.png",
+    "label": "sabi Flower",
+    "category": "flowers"
+  },
+    {
+    "url": "/images/flowers/nature.png",
+    "label": "nature Flower",
+    "category": "flowers"
+  },
+
+ {
+    "url": "/images/flowers/flower (6).png",
+    "label": "Flower",
+    "category": "flowers"
+  },
+  {
+    "url": "/images/flowers/flower-bouquet.png",
+    "label": "flower-bouquet Flower",
+    "category": "flowers"
+  },
+  {
+    "url": "/images/flowers/blue-flax.png",
+    "label": "blue-flax Flower",
+    "category": "flowers"
+  },
+  {
+    "url": "/images/flowers/flower-bouquet (1).png",
+    "label": "Flower",
+    "category": "flowers"
+  },
+  {
+    "url": "/images/flowers/flower (7).png",
+    "label": " White Flower",
+    "category": "flowers"
+  },
+  {
+    "url": "/images/flowers/poinsettia.png",
+    "label": "poinsettia Flower",
+    "category": "flowers"
+  },
+ {
+    "url": "/images/flowers/flower (8).png",
+    "label": "Flower Flower",
+    "category": "flowers"
+  } 
+  ],
+
+
+
+
+ "stickers": [
+  {
+    "url": "/images/stickers/undraw_blogging_38kl.svg",
+    "label": "Pink Heart",
+    "category": "hearts"
+  }
+ ,
+  {
+    "url": "/images/stickers/stickers1.png",
+    "label": "Pink Heart",
+    "category": "hearts"
+  }, {
+    "url": "/images/stickers/stickers2.png",
+    "label": "Pink Heart",
+    "category": "hearts"
+  }, {
+    "url": "/images/stickers/stickers3.png",
+    "label": "Pink Heart",
+    "category": "hearts"
+  }, {
+    "url": "/images/stickers/stickers4.png",
+    "label": "Pink Heart",
+    "category": "hearts"
+  }, {
+    "url": "/images/stickers/stickers5.png",
+    "label": "Pink Heart",
+    "category": "hearts"
+  }, {
+    "url": "/images/stickers/stickers6.png",
+    "label": "Pink Heart",
+    "category": "hearts"
+  }, {
+    "url": "/images/stickers/stickers7.png",
+    "label": "Pink Heart",
+    "category": "hearts"
+  }, {
+    "url": "/images/stickers/stickers8.png",
+    "label": "Pink Heart",
+    "category": "hearts"
+  }, {
+    "url": "/images/stickers/stickers9.png",
+    "label": "Pink Heart",
+    "category": "hearts"
+  }, {
+    "url": "/images/stickers/stickers10.png",
+    "label": "Pink Heart",
+    "category": "hearts"
+  }, {
+    "url": "/images/stickers/stickers11.png",
+    "label": "Pink Heart",
+    "category": "hearts"
+  }
+  ],
+
+
+
+  "backgrounds": [
+    {
+      "url": "/images/backgrounds/gradient-sunset.jpg",
+      "label": "Sunset Gradient",
+      "category": "gradients"
+    }
+  ],
+  "icons": [
+    {
+      "svg": "<svg viewBox='0 0 24 24'><path d='M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z'/></svg>",
+      "label": "Star Icon",
+      "category": "basic"
+    }
+  ]
+}
