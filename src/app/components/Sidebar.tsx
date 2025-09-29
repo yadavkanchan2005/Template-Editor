@@ -10,8 +10,8 @@ import VerticalAlignTopIcon from "@mui/icons-material/VerticalAlignTop";
 import VerticalAlignBottomIcon from "@mui/icons-material/VerticalAlignBottom";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
-import CreateIcon from "@mui/icons-material/Create"; // Pencil / Draw icon
-
+import CreateIcon from "@mui/icons-material/Create"; 
+import TemplatesPanel from "./panal/TemplatePanel";
 import DynamicElementsPanel from "./panal/DynamicElementsPanel";
 
 const CanvaSidebar = styled(Drawer)(({ theme }) => ({
@@ -53,7 +53,6 @@ interface SidebarProps {
   onBringToFront: () => void;
   onSendToBack: () => void;
   onDrawMode: () => void; 
-  onSelectCategory?: (cat: string) => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -68,12 +67,52 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [mounted, setMounted] = useState(false);
   const [elementsOpen, setElementsOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
 
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
 
   const toggleElementsPanel = () => setElementsOpen((open) => !open);
   const closeElementsPanel = () => setElementsOpen(false);
+
+  const toggleTemplatesPanel = () => setTemplatesOpen((open) => !open);
+  const closeTemplatesPanel = () => setTemplatesOpen(false);
+
+
+const handleTemplateData = (templateData: any) => {
+  console.log("Template received in Sidebar:", templateData);
+  
+  // Check if it's a template object with elements array
+  if (templateData && templateData.elements && Array.isArray(templateData.elements)) {
+    console.log("Processing template elements:", templateData.elements);
+    
+    // Pass the template object (not just elements) to MiniCanva
+onAddShape({ 
+  type: "LOAD_TEMPLATE", 
+  payload: {
+    template: templateData,
+    snapshot: null,
+    prevSize: null,
+    prevBg: null
+  }
+});
+
+  }
+  // If it's already an elements array
+  else if (Array.isArray(templateData)) {
+    console.log("Processing elements array:", templateData);
+    
+    templateData.forEach((element) => {
+      console.log("Adding individual element:", element);
+      onAddShape(element);
+    });
+  }
+  // Single element
+  else {
+    console.log("Adding single element:", templateData);
+    onAddShape(templateData);
+  }
+};
 
   return (
     <>
@@ -82,32 +121,24 @@ const Sidebar: React.FC<SidebarProps> = ({
         anchor="left"
         sx={{ "& .MuiDrawer-paper": { position: "fixed", zIndex: 1200 } }}
       >
-        <Box
-          sx={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            height: "100%",
-            overflowY: "auto",
-          }}
-        >
+        <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", overflowY: "auto" }}>
           {/* Templates */}
           <Tooltip title="Templates" placement="right" arrow>
-            <SidebarIconButton aria-label="Templates">
+            <SidebarIconButton onClick={toggleTemplatesPanel}>
               <DashboardIcon />
             </SidebarIconButton>
           </Tooltip>
 
           {/* Add Text */}
           <Tooltip title="Add Text" placement="right" arrow>
-            <SidebarIconButton onClick={onAddText} aria-label="Add Text">
+            <SidebarIconButton onClick={onAddText}>
               <TextFieldsIcon />
             </SidebarIconButton>
           </Tooltip>
 
           {/* Pencil / Draw */}
           <Tooltip title="Draw / Pencil" placement="right" arrow>
-            <SidebarIconButton onClick={onDrawMode} aria-label="Draw">
+            <SidebarIconButton onClick={onDrawMode}>
               <CreateIcon />
             </SidebarIconButton>
           </Tooltip>
@@ -116,7 +147,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
           {/* Elements */}
           <Tooltip title="Elements" placement="right" arrow>
-            <SidebarIconButton onClick={toggleElementsPanel} aria-label="Elements">
+            <SidebarIconButton onClick={toggleElementsPanel}>
               <WidgetsIcon />
             </SidebarIconButton>
           </Tooltip>
@@ -125,7 +156,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
           {/* Delete */}
           <Tooltip title="Delete" placement="right" arrow>
-            <SidebarIconButton onClick={onDelete} aria-label="Delete">
+            <SidebarIconButton onClick={onDelete}>
               <DeleteIcon />
             </SidebarIconButton>
           </Tooltip>
@@ -134,36 +165,44 @@ const Sidebar: React.FC<SidebarProps> = ({
 
           {/* Layer Controls */}
           <Tooltip title="Bring Forward" placement="right" arrow>
-            <SidebarIconButton onClick={onBringForward} aria-label="Bring Forward">
+            <SidebarIconButton onClick={onBringForward}>
               <ArrowUpwardIcon />
             </SidebarIconButton>
           </Tooltip>
 
           <Tooltip title="Send Backward" placement="right" arrow>
-            <SidebarIconButton onClick={onSendBackward} aria-label="Send Backward">
+            <SidebarIconButton onClick={onSendBackward}>
               <ArrowDownwardIcon />
             </SidebarIconButton>
           </Tooltip>
 
           <Tooltip title="Bring to Front" placement="right" arrow>
-            <SidebarIconButton onClick={onBringToFront} aria-label="Bring to Front">
+            <SidebarIconButton onClick={onBringToFront}>
               <VerticalAlignTopIcon />
             </SidebarIconButton>
           </Tooltip>
 
           <Tooltip title="Send to Back" placement="right" arrow>
-            <SidebarIconButton onClick={onSendToBack} aria-label="Send to Back">
+            <SidebarIconButton onClick={onSendToBack}>
               <VerticalAlignBottomIcon />
             </SidebarIconButton>
           </Tooltip>
         </Box>
       </CanvaSidebar>
 
-      {/* Elements Panel */}
+      {/* Dynamic Elements Panel */}
       {elementsOpen && (
         <DynamicElementsPanel 
           onAddElement={onAddShape} 
           onClose={closeElementsPanel} 
+        />
+      )}
+
+      {/* Templates Panel */}
+      {templatesOpen && (
+        <TemplatesPanel 
+          onTemplateSelect={handleTemplateData} 
+          onClose={closeTemplatesPanel} 
         />
       )}
     </>

@@ -11,6 +11,7 @@ import {
   Typography,
   ButtonGroup,
   Paper,
+   Popover,
   Select, MenuItem,
 } from "@mui/material";
 import { styled } from "@mui/material/styles";
@@ -27,8 +28,15 @@ import {
   Flip as FlipIcon,
   Replay as ReplayIcon,
   BorderStyle as BorderStyleIcon,
+    Animation as AnimationIcon,
+     Lock,
+  LockOpen,
+  Visibility,
+  VisibilityOff,
 } from "@mui/icons-material";
 import CommandManager, { Command } from "@/lib/CommandManager";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import AnimationPanel from "./AnimationSidebar/AnimationPanel";
 
 // Styled components (same as circle panel)
 const StyledInput = styled(TextField)({
@@ -158,7 +166,7 @@ const RectanglePropertiesPanel: React.FC<RectanglePropertiesPanelProps> = ({
   const [strokePickerOpen, setStrokePickerOpen] = useState(false);
   const [shadowPickerOpen, setShadowPickerOpen] = useState(false);
   const [gradientPanelOpen, setGradientPanelOpen] = useState(false);
-
+const [showAnimationPanel, setShowAnimationPanel] = useState(false);
 
 
   useEffect(() => {
@@ -300,194 +308,216 @@ const RectanglePropertiesPanel: React.FC<RectanglePropertiesPanelProps> = ({
   };
 
   if (!selectedObject) return null;
-
-  return (
-    <Box sx={{ width: '100%', overflowX: 'auto', bgcolor: '#ffffff', padding: 2, display: 'flex', gap: 1.5, alignItems: 'center' }}>
-      {/* Radius for circle/rect/triangle */}
-      {(selectedObject.type === 'rect' || selectedObject.type === 'circle' || selectedObject.type === 'triangle') && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Radius</Typography>
-          <StyledInput type="number" value={propsState.radius} onChange={e => handleChange("radius", Number(e.target.value))} />
-        </Box>
-      )}
-      {/* Sides for polygon */}
-      {(selectedObject.type === 'polygon' || selectedObject.type === 'triangle') && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>
-            {selectedObject.type === 'polygon' ? 'Sides' : 'Triangle Corners'}
-          </Typography>
-          <StyledInput
-            type="number"
-            value={propsState.sides}
-            onChange={e => handleChange("sides", Math.max(3, Number(e.target.value)))}
-            inputProps={{ min: 3 }}
-          />
-        </Box>
-
-      )}
-      {/* Position */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Position</Typography>
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <StyledInput type="number" value={Math.round(propsState.x)} onChange={e => handleChange("x", Number(e.target.value))} />
-          <StyledInput type="number" value={Math.round(propsState.y)} onChange={e => handleChange("y", Number(e.target.value))} />
-        </Box>
-      </Box>
-
-      {/* Size */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Size</Typography>
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <StyledInput type="number" value={Math.round(propsState.width)} onChange={e => handleChange("width", Number(e.target.value))} />
-          <StyledInput type="number" value={Math.round(propsState.height)} onChange={e => handleChange("height", Number(e.target.value))} />
-        </Box>
-      </Box>
-
-      {/* Rotation */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <RotateRightIcon sx={{ fontSize: 14, color: '#6b7280', mb: 0.5 }} />
-        <StyledInput type="number" value={Math.round(propsState.angle)} onChange={e => handleChange("angle", Number(e.target.value))} />
-      </Box>
-
-      {/* Opacity */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <OpacityIcon sx={{ fontSize: 14, color: '#6b7280', mb: 0.5 }} />
-        <StyledSlider value={propsState.opacity} min={0} max={1} step={0.01} onChange={(_, v) => handleChange("opacity", v)} />
-      </Box>
-
-      {/* Fill */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
-        <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Fill</Typography>
-        <Tooltip title="Fill Color">
-          <ColorIconButton data-color-button="fill" onClick={() => setFillPickerOpen(!fillPickerOpen)} sx={{ backgroundColor: typeof propsState.fill === 'string' ? propsState.fill : 'linear-gradient(45deg,#ff6b6b,#4ecdc4)' }}>
-            <FormatColorFillIcon sx={{ fontSize: 16 }} />
-          </ColorIconButton>
-        </Tooltip>
-        {fillPickerOpen && (
-          <ColorPickerPanel className="color-picker-panel">
-            <ChromePicker color={typeof propsState.fill === 'string' ? propsState.fill : '#BEF4FF'} onChangeComplete={(color: { hex: String }) => { handleChange('fill', color.hex); setFillPickerOpen(false) }} width="250px" disableAlpha />
-            <Box sx={{ mt: 2, pt: 1, borderTop: '1px solid #e2e8f0' }}>
-              <Button size="small" fullWidth onClick={() => { setGradientPanelOpen(true); setFillPickerOpen(false); }}>Gradient Options</Button>
-            </Box>
-          </ColorPickerPanel>
+return (
+    <>
+      <Box sx={{ width: '100%', overflowX: 'auto', bgcolor: '#ffffff', padding: 2, display: 'flex', gap: 1.5, alignItems: 'center' }}>
+        {/* Radius */}
+        {(selectedObject.type === 'rect' || selectedObject.type === 'circle' || selectedObject.type === 'triangle') && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Radius</Typography>
+            <StyledInput type="number" value={propsState.radius} onChange={e => handleChange("radius", Number(e.target.value))} />
+          </Box>
         )}
 
-        {gradientPanelOpen && (
-          <GradientPanel className="gradient-panel">
-            <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }}>Gradient Types</Typography>
-            <ButtonGroup size="small" orientation="vertical" fullWidth>
-              <Button onClick={() => createGradient('linear')}>Linear Gradient</Button>
-              <Button onClick={() => createGradient('radial')}>Radial Gradient</Button>
-            </ButtonGroup>
-          </GradientPanel>
+        {/* Sides */}
+        {(selectedObject.type === 'polygon' || selectedObject.type === 'triangle') && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>
+              {selectedObject.type === 'polygon' ? 'Sides' : 'Triangle Corners'}
+            </Typography>
+            <StyledInput type="number" value={propsState.sides} onChange={e => handleChange("sides", Math.max(3, Number(e.target.value)))} inputProps={{ min: 3 }} />
+          </Box>
         )}
-      </Box>
 
-      {/* Stroke */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
-        <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Stroke</Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Tooltip title="Stroke Color">
-            <ColorIconButton onClick={() => setStrokePickerOpen(!strokePickerOpen)} sx={{ backgroundColor: propsState.stroke }}>
-              <BorderColorIcon sx={{ fontSize: 16 }} />
+        {/* Position */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Position</Typography>
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <StyledInput type="number" value={Math.round(propsState.x)} onChange={e => handleChange("x", Number(e.target.value))} />
+            <StyledInput type="number" value={Math.round(propsState.y)} onChange={e => handleChange("y", Number(e.target.value))} />
+          </Box>
+        </Box>
+
+        {/* Size */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Size</Typography>
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <StyledInput type="number" value={Math.round(propsState.width)} onChange={e => handleChange("width", Number(e.target.value))} />
+            <StyledInput type="number" value={Math.round(propsState.height)} onChange={e => handleChange("height", Number(e.target.value))} />
+          </Box>
+        </Box>
+
+        {/* Rotation */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <RotateRightIcon sx={{ fontSize: 14, color: '#6b7280', mb: 0.5 }} />
+          <StyledInput type="number" value={Math.round(propsState.angle)} onChange={e => handleChange("angle", Number(e.target.value))} />
+        </Box>
+
+        {/* Opacity */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <OpacityIcon sx={{ fontSize: 14, color: '#6b7280', mb: 0.5 }} />
+          <StyledSlider value={propsState.opacity} min={0} max={1} step={0.01} onChange={(_, v) => handleChange("opacity", v)} />
+        </Box>
+
+        {/* Fill */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Fill</Typography>
+          <Tooltip title="Fill Color">
+            <ColorIconButton onClick={() => setFillPickerOpen(!fillPickerOpen)} sx={{ backgroundColor: typeof propsState.fill === 'string' ? propsState.fill : 'linear-gradient(45deg,#ff6b6b,#4ecdc4)' }}>
+              <FormatColorFillIcon sx={{ fontSize: 16 }} />
             </ColorIconButton>
           </Tooltip>
-          <StyledInput type="number" value={propsState.strokeWidth} onChange={e => handleChange("strokeWidth", Number(e.target.value))} />
-        </Box>
-        {strokePickerOpen && (
-          <ColorPickerPanel>
-            <ChromePicker color={propsState.stroke} onChangeComplete={(color: { hex: String }) => { handleChange('stroke', color.hex); setStrokePickerOpen(false) }} width="250px" disableAlpha />
-          </ColorPickerPanel>
-        )}
-      </Box>
-
-          {/* Stroke Style */}
-      <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <Typography variant="caption" sx={{ mb: 0.5, fontSize: 10, color: "#6b7280" }}>Stroke Style</Typography>
-        <Select value={propsState.strokeStyle ?? "solid"} size="small" onChange={(e) => handleChange("strokeStyle", e.target.value)} sx={{ width: 100 }}>
-          {strokeStyles.map((style) => (
-            <MenuItem key={style.key} value={style.key}>
-              <Box sx={{ display: "flex", alignItems: "center" }}>
-                <svg width="60" height="10">
-                  {style.key === "wavy" ? (
-                    <path d="M0 5 Q2 0, 4 5 T8 5 T12 5 T16 5 T20 5 T24 5 T28 5 T32 5 T36 5 T40 5 T44 5 T48 5 T52 5 T56 5 T60 5" stroke="black" strokeWidth="2" fill="none" />
-                  ) : (
-                    <line x1={0} y1={5} x2={60} y2={5} stroke="black" strokeWidth={2} strokeDasharray={style.dash.join(",")} />
-                  )}
-                </svg>
+          {fillPickerOpen && (
+            <ColorPickerPanel>
+              <ChromePicker color={typeof propsState.fill === 'string' ? propsState.fill : '#BEF4FF'} onChangeComplete={(color: { hex: string }) => { handleChange('fill', color.hex); setFillPickerOpen(false) }} disableAlpha />
+              <Box sx={{ mt: 2, pt: 1, borderTop: '1px solid #e2e8f0' }}>
+                <Button size="small" fullWidth onClick={() => { setGradientPanelOpen(true); setFillPickerOpen(false); }}>Gradient Options</Button>
               </Box>
-            </MenuItem>
-          ))}
-        </Select>
-      </Box>
-
-      {/* Flip */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Flip</Typography>
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <Tooltip title="Flip Horizontal">
-            <ActionButton onClick={() => handleChange("flipX", !propsState.flipX)} sx={{ backgroundColor: propsState.flipX ? '#e0e7ff' : '#f8fafc', color: propsState.flipX ? '#4338ca' : '#6b7280' }}><FlipIcon sx={{ transform: "scaleX(-1)", fontSize: 16 }} /></ActionButton>
-          </Tooltip>
-          <Tooltip title="Flip Vertical">
-            <ActionButton onClick={() => handleChange("flipY", !propsState.flipY)} sx={{ backgroundColor: propsState.flipY ? '#e0e7ff' : '#f8fafc', color: propsState.flipY ? '#4338ca' : '#6b7280' }}><FlipIcon sx={{ fontSize: 16 }} /></ActionButton>
-          </Tooltip>
+            </ColorPickerPanel>
+          )}
+          {gradientPanelOpen && (
+            <GradientPanel>
+              <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }}>Gradient Types</Typography>
+              <ButtonGroup size="small" orientation="vertical" fullWidth>
+                <Button onClick={() => createGradient('linear')}>Linear Gradient</Button>
+                <Button onClick={() => createGradient('radial')}>Radial Gradient</Button>
+              </ButtonGroup>
+            </GradientPanel>
+          )}
         </Box>
-      </Box>
 
-      {/* Shadow */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
-        <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Shadow</Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Tooltip title="Shadow Color">
-            <ColorIconButton onClick={() => setShadowPickerOpen(!shadowPickerOpen)} sx={{ backgroundColor: propsState.shadowColor, opacity: propsState.shadowBlur > 0 ? 1 : 0.5 }}>
-              <ReplayIcon sx={{ fontSize: 16 }} />
-            </ColorIconButton>
-          </Tooltip>
-          <StyledSlider value={propsState.shadowBlur} min={0} max={20} step={1} onChange={(_, v) => handleChange("shadowBlur", v)} />
+        {/* Stroke */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Stroke</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Tooltip title="Stroke Color">
+              <ColorIconButton onClick={() => setStrokePickerOpen(!strokePickerOpen)} sx={{ backgroundColor: propsState.stroke }}>
+                <BorderColorIcon sx={{ fontSize: 16 }} />
+              </ColorIconButton>
+            </Tooltip>
+            <StyledInput type="number" value={propsState.strokeWidth} onChange={e => handleChange("strokeWidth", Number(e.target.value))} />
+          </Box>
+          {strokePickerOpen && (
+            <ColorPickerPanel>
+              <ChromePicker color={propsState.stroke} onChangeComplete={(color: { hex: string }) => { handleChange('stroke', color.hex); setStrokePickerOpen(false) }} disableAlpha />
+            </ColorPickerPanel>
+          )}
         </Box>
-        {shadowPickerOpen && (
-          <ColorPickerPanel>
-            <ChromePicker color={propsState.shadowColor} onChangeComplete={(color: { hex: String }) => { handleChange('shadowColor', color.hex); setShadowPickerOpen(false) }} width="250px" disableAlpha />
-            <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-              <Typography variant="caption" sx={{ fontWeight: 600 }}>Shadow Offset</Typography>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="caption" sx={{ fontSize: '10px' }}>X</Typography>
-                  <StyledSlider value={propsState.shadowOffsetX} min={-20} max={20} step={1} onChange={(_, v) => handleChange("shadowOffsetX", v)} sx={{ width: 80 }} />
+
+        {/* Stroke Style */}
+        <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <Typography variant="caption" sx={{ mb: 0.5, fontSize: 10, color: "#6b7280" }}>Stroke Style</Typography>
+          <Select value={propsState.strokeStyle ?? "solid"} size="small" onChange={(e) => handleChange("strokeStyle", e.target.value)} sx={{ width: 100 }}>
+            {strokeStyles.map((style) => (
+              <MenuItem key={style.key} value={style.key}>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <svg width="60" height="10">
+                    {style.key === "wavy" ? (
+                      <path d="M0 5 Q2 0, 4 5 T8 5 T12 5 T16 5 T20 5 T24 5 T28 5 T32 5 T36 5 T40 5 T44 5 T48 5 T52 5 T56 5 T60 5" stroke="black" strokeWidth="2" fill="none" />
+                    ) : (
+                      <line x1={0} y1={5} x2={60} y2={5} stroke="black" strokeWidth={2} strokeDasharray={style.dash.join(",")} />
+                    )}
+                  </svg>
                 </Box>
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="caption" sx={{ fontSize: '10px' }}>Y</Typography>
-                  <StyledSlider value={propsState.shadowOffsetY} min={-20} max={20} step={1} onChange={(_, v) => handleChange("shadowOffsetY", v)} sx={{ width: 80 }} />
-                </Box>
-              </Box>
-            </Box>
-          </ColorPickerPanel>
-        )}
-      </Box>
-
-      {/* Actions */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Actions</Typography>
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <Tooltip title="Copy"><ActionButton onClick={handleCopy}><ContentCopy sx={{ fontSize: 16 }} /></ActionButton></Tooltip>
-          <Tooltip title="Paste"><ActionButton onClick={handlePaste}><ContentPaste sx={{ fontSize: 16 }} /></ActionButton></Tooltip>
-          <Tooltip title="Duplicate"><ActionButton onClick={handleDuplicate}><DuplicateIcon sx={{ fontSize: 16 }} /></ActionButton></Tooltip>
-          <Tooltip title="Delete"><ActionButton onClick={handleDelete} sx={{ color: '#dc2626' }}><Delete sx={{ fontSize: 16 }} /></ActionButton></Tooltip>
+              </MenuItem>
+            ))}
+          </Select>
         </Box>
-      </Box>
 
-      {/* Reset Shadow */}
-      {(propsState.shadowBlur > 0 || propsState.shadowOffsetX !== 0 || propsState.shadowOffsetY !== 0) && (
+        {/* Flip */}
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Reset</Typography>
-          <Tooltip title="Reset Shadow">
-            <ActionButton onClick={() => { handleChange("shadowBlur", 0); handleChange("shadowOffsetX", 0); handleChange("shadowOffsetY", 0); }}>
-              <ReplayIcon sx={{ fontSize: 16 }} />
+          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Flip</Typography>
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <Tooltip title="Flip Horizontal">
+              <ActionButton onClick={() => handleChange("flipX", !propsState.flipX)} sx={{ backgroundColor: propsState.flipX ? '#e0e7ff' : '#f8fafc', color: propsState.flipX ? '#4338ca' : '#6b7280' }}><FlipIcon sx={{ transform: "scaleX(-1)", fontSize: 16 }} /></ActionButton>
+            </Tooltip>
+            <Tooltip title="Flip Vertical">
+              <ActionButton onClick={() => handleChange("flipY", !propsState.flipY)} sx={{ backgroundColor: propsState.flipY ? '#e0e7ff' : '#f8fafc', color: propsState.flipY ? '#4338ca' : '#6b7280' }}><FlipIcon sx={{ fontSize: 16 }} /></ActionButton>
+            </Tooltip>
+          </Box>
+        </Box>
+
+        {/* Animation Button */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Animate</Typography>
+          <Tooltip title="Add Animation">
+            <ActionButton 
+              onClick={() => setShowAnimationPanel(!showAnimationPanel)}
+              sx={{ 
+                backgroundColor: showAnimationPanel ? '#f0f4ff' : '#f8fafc',
+                color: showAnimationPanel ? '#7b68ee' : '#6b7280',
+                borderColor: showAnimationPanel ? '#7b68ee' : '#e2e8f0',
+              }}
+            >
+              <AnimationIcon sx={{ fontSize: 16 }} />
             </ActionButton>
           </Tooltip>
         </Box>
+
+        {/* Shadow */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Shadow</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Tooltip title="Shadow Color">
+              <ColorIconButton onClick={() => setShadowPickerOpen(!shadowPickerOpen)} sx={{ backgroundColor: propsState.shadowColor, opacity: propsState.shadowBlur > 0 ? 1 : 0.5 }}>
+                <ReplayIcon sx={{ fontSize: 16 }} />
+              </ColorIconButton>
+            </Tooltip>
+            <StyledSlider value={propsState.shadowBlur} min={0} max={20} step={1} onChange={(_, v) => handleChange("shadowBlur", v)} />
+          </Box>
+          {shadowPickerOpen && (
+            <ColorPickerPanel>
+              <ChromePicker color={propsState.shadowColor} onChangeComplete={(color: { hex: string }) => { handleChange('shadowColor', color.hex); setShadowPickerOpen(false) }} disableAlpha />
+              <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Typography variant="caption" sx={{ fontWeight: 600 }}>Shadow Offset</Typography>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="caption" sx={{ fontSize: '10px' }}>X</Typography>
+                    <StyledSlider value={propsState.shadowOffsetX} min={-20} max={20} step={1} onChange={(_, v) => handleChange("shadowOffsetX", v)} sx={{ width: 80 }} />
+                  </Box>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="caption" sx={{ fontSize: '10px' }}>Y</Typography>
+                    <StyledSlider value={propsState.shadowOffsetY} min={-20} max={20} step={1} onChange={(_, v) => handleChange("shadowOffsetY", v)} sx={{ width: 80 }} />
+                  </Box>
+                </Box>
+              </Box>
+            </ColorPickerPanel>
+          )}
+        </Box>
+
+        {/* Actions */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Actions</Typography>
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <Tooltip title="Copy"><ActionButton onClick={handleCopy}><ContentCopy sx={{ fontSize: 16 }} /></ActionButton></Tooltip>
+            <Tooltip title="Paste"><ActionButton onClick={handlePaste}><ContentPaste sx={{ fontSize: 16 }} /></ActionButton></Tooltip>
+            <Tooltip title="Duplicate"><ActionButton onClick={handleDuplicate}><DuplicateIcon sx={{ fontSize: 16 }} /></ActionButton></Tooltip>
+            <Tooltip title="Delete"><ActionButton onClick={handleDelete} sx={{ color: '#dc2626' }}><Delete sx={{ fontSize: 16 }} /></ActionButton></Tooltip>
+          </Box>
+        </Box>
+
+        {/* Reset Shadow */}
+        {(propsState.shadowBlur > 0 || propsState.shadowOffsetX !== 0 || propsState.shadowOffsetY !== 0) && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Reset</Typography>
+            <Tooltip title="Reset Shadow">
+              <ActionButton onClick={() => { handleChange("shadowBlur", 0); handleChange("shadowOffsetX", 0); handleChange("shadowOffsetY", 0); }}>
+                <ReplayIcon sx={{ fontSize: 16 }} />
+              </ActionButton>
+            </Tooltip>
+          </Box>
+        )}
+      </Box>
+
+      {/* Animation Panel */}
+      {showAnimationPanel && (
+        <AnimationPanel
+          onClose={() => setShowAnimationPanel(false)}
+          canvas={canvas}
+          selectedObject={selectedObject}
+        />
       )}
-    </Box>
+    </>
   );
 };
 

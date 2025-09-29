@@ -1,19 +1,18 @@
 "use client";
 import React, { useEffect, useRef } from "react";
 import * as fabric from "fabric";
-import CommandManager, { Command } from "@/lib/CommandManager"; 
+import CommandManager, { Command } from "@/lib/CommandManager";
 
-const { Canvas, Textbox, Rect, Circle, Triangle, Line, Polygon } = fabric;
+const { Canvas, Textbox, Rect, Circle, Triangle, Line, Polygon, Group } = fabric;
 const FabricImage = fabric.Image;
 
 type Action = { type: string; payload?: any } | null;
 
 interface Props {
   action: Action;
-    drawMode?: boolean; 
   onCanvasReady?: (canvas: fabric.Canvas) => void;
-   onObjectSelected?: (object: fabric.Object | null) => void; 
-     setSelectedObject?: (obj: fabric.Object | null) => void;
+  onObjectSelected?: (object: fabric.Object | null) => void;
+  setSelectedObject?: (obj: fabric.Object | null) => void;
 }
 
 
@@ -45,12 +44,89 @@ function moveObjectToIndex(canvas: fabric.Canvas, obj: fabric.Object, index: num
   canvas.requestRenderAll();
 }
 
-const MiniCanva: React.FC<Props> = ({ action, onCanvasReady, onObjectSelected,setSelectedObject }) => {
+const MiniCanva: React.FC<Props> = ({ action, onCanvasReady, onObjectSelected, setSelectedObject }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasInstance = useRef<fabric.Canvas | null>(null);
   const managerRef = useRef<CommandManager | null>(null);
-  
 
+  // --- Generic function to add any element ---
+  // Ye function line 27 ke around hai - isko pura replace kar do
+  const addElementToCanvas = async (el: any, canvas: fabric.Canvas): Promise<fabric.Object | null> => {
+    let obj: fabric.Object | null = null;
+
+    console.log("Adding element:", el); // Debug ke liye
+
+    switch (el.type) {
+      case "text":
+        obj = new Textbox(el.text || "Text", {
+          left: el.x || 50,
+          top: el.y || 50,
+          fontSize: el.fontSize || 24,
+          fill: el.fill || "#000",
+        });
+        break;
+
+      case "image":
+        try {
+          // Placeholder image ya real image handle karo
+          const imgSrc = el.placeholder ? "/placeholder.png" : (el.src || "/placeholder.png");
+
+          const img = await fabric.Image.fromURL(imgSrc, { crossOrigin: "anonymous" });
+          img.set({
+            left: el.x || 50,
+            top: el.y || 50,
+            scaleX: el.width ? el.width / img.width! : 1,
+            scaleY: el.height ? el.height / img.height! : 1,
+          });
+          obj = img;
+        } catch (error) {
+          console.error("Image loading failed:", error);
+          // Fallback rectangle if image fails
+          obj = new Rect({
+            left: el.x || 50,
+            top: el.y || 50,
+            width: el.width || 200,
+            height: el.height || 200,
+            fill: "#f0f0f0",
+            stroke: "#ddd",
+            strokeDashArray: [5, 5]
+          });
+        }
+        break;
+
+      case "button":
+        const rect = new Rect({
+          width: el.width ?? 140,
+          height: el.height ?? 50,
+          rx: el.rx ?? 6,
+          ry: el.ry ?? 6,
+          fill: el.fill ?? "#7b68ee",
+        });
+        const btnText = new Textbox(el.text || "Button", {
+          fontSize: el.fontSize ?? 16,
+          fill: el.textColor ?? "#fff",
+          originX: "center",
+          originY: "center",
+          left: (el.width ?? 140) / 2,
+          top: (el.height ?? 50) / 2,
+        });
+        obj = new Group([rect, btnText], {
+          left: el.x ?? 50,
+          top: el.y ?? 50,
+        });
+        break;
+
+      default:
+        console.warn("Unknown element type:", el.type);
+        break;
+    }
+
+    if (obj) {
+      canvas.add(obj);
+      return obj;
+    }
+    return null;
+  };
   // map to store object state before modification (for modify command)
   const prevStateMap = useRef<WeakMap<fabric.Object, any>>(new WeakMap());
 
@@ -65,6 +141,241 @@ const MiniCanva: React.FC<Props> = ({ action, onCanvasReady, onObjectSelected,se
     });
   };
 
+
+  const playObjectAnimation = (obj: fabric.Object, animationId: string, speed: number) => {
+    const canvas = canvasInstance.current;
+    if (!canvas) return;
+
+    const duration = 1000 / speed;
+    const originalLeft = obj.left || 0;
+    const originalTop = obj.top || 0;
+    const originalScaleX = obj.scaleX || 1;
+    const originalScaleY = obj.scaleY || 1;
+    const originalOpacity = obj.opacity || 1;
+    const originalAngle = obj.angle || 0;
+
+    switch (animationId) {
+      case "fadeIn":
+        obj.set({ opacity: 0 });
+        obj.animate({ opacity: originalOpacity }, {
+          duration,
+          onChange: () => canvas.renderAll(),
+          onComplete: () => {
+            setTimeout(() => {
+              if ((obj as any).animationId === animationId) {
+                playObjectAnimation(obj, animationId, speed);
+              }
+            }, 1000);
+          }
+        });
+        break;
+
+      case "slideLeft":
+        obj.set({ left: originalLeft + 200 });
+        obj.animate({ left: originalLeft }, {
+          duration,
+          onChange: () => canvas.renderAll(),
+          onComplete: () => {
+            setTimeout(() => {
+              if ((obj as any).animationId === animationId) {
+                playObjectAnimation(obj, animationId, speed);
+              }
+            }, 1000);
+          }
+        });
+        break;
+
+      case "slideRight":
+        obj.set({ left: originalLeft - 200 });
+        obj.animate({ left: originalLeft }, {
+          duration,
+          onChange: () => canvas.renderAll(),
+          onComplete: () => {
+            setTimeout(() => {
+              if ((obj as any).animationId === animationId) {
+                playObjectAnimation(obj, animationId, speed);
+              }
+            }, 1000);
+          }
+        });
+        break;
+
+      case "ascend":
+        obj.set({ top: originalTop + 100, opacity: 0 });
+        obj.animate({ top: originalTop, opacity: originalOpacity }, {
+          duration,
+          onChange: () => canvas.renderAll(),
+          onComplete: () => {
+            setTimeout(() => {
+              if ((obj as any).animationId === animationId) {
+                playObjectAnimation(obj, animationId, speed);
+              }
+            }, 1000);
+          }
+        });
+        break;
+
+      case "shift":
+        obj.set({ left: originalLeft - 50, opacity: 0 });
+        obj.animate({ left: originalLeft, opacity: originalOpacity }, {
+          duration,
+          onChange: () => canvas.renderAll(),
+          onComplete: () => {
+            setTimeout(() => {
+              if ((obj as any).animationId === animationId) {
+                playObjectAnimation(obj, animationId, speed);
+              }
+            }, 1000);
+          }
+        });
+        break;
+
+      case "zoomIn":
+        obj.set({ scaleX: 0, scaleY: 0, opacity: 0 });
+        obj.animate({ scaleX: originalScaleX, scaleY: originalScaleY, opacity: originalOpacity }, {
+          duration,
+          onChange: () => canvas.renderAll(),
+          onComplete: () => {
+            setTimeout(() => {
+              if ((obj as any).animationId === animationId) {
+                playObjectAnimation(obj, animationId, speed);
+              }
+            }, 1000);
+          }
+        });
+        break;
+
+      case "rotate":
+        obj.set({ angle: -180, opacity: 0 });
+        obj.animate({ angle: originalAngle, opacity: originalOpacity }, {
+          duration,
+          onChange: () => canvas.renderAll(),
+          onComplete: () => {
+            setTimeout(() => {
+              if ((obj as any).animationId === animationId) {
+                playObjectAnimation(obj, animationId, speed);
+              }
+            }, 1000);
+          }
+        });
+        break;
+
+      case "bounce":
+        obj.set({ top: originalTop - 150, opacity: 0 });
+        obj.animate({ top: originalTop, opacity: originalOpacity }, {
+          duration: duration * 1.2,
+          easing: (t: number) => {
+            const c = 1.70158;
+            return --t * t * ((c + 1) * t + c) + 1;
+          },
+          onChange: () => canvas.renderAll(),
+          onComplete: () => {
+            setTimeout(() => {
+              if ((obj as any).animationId === animationId) {
+                playObjectAnimation(obj, animationId, speed);
+              }
+            }, 1000);
+          }
+        });
+        break;
+
+      case "merge":
+        obj.set({ scaleX: 0.1, opacity: 0 });
+        obj.animate({ scaleX: originalScaleX, opacity: originalOpacity }, {
+          duration,
+          onChange: () => canvas.renderAll(),
+          onComplete: () => {
+            setTimeout(() => {
+              if ((obj as any).animationId === animationId) {
+                playObjectAnimation(obj, animationId, speed);
+              }
+            }, 1000);
+          }
+        });
+        break;
+
+      case "block":
+        obj.set({ scaleY: 0, opacity: 0 });
+        obj.animate({ scaleY: originalScaleY, opacity: originalOpacity }, {
+          duration,
+          onChange: () => canvas.renderAll(),
+          onComplete: () => {
+            setTimeout(() => {
+              if ((obj as any).animationId === animationId) {
+                playObjectAnimation(obj, animationId, speed);
+              }
+            }, 1000);
+          }
+        });
+        break;
+
+      case "burst":
+        obj.set({ scaleX: 2, scaleY: 2, opacity: 0 });
+        obj.animate({ scaleX: originalScaleX, scaleY: originalScaleY, opacity: originalOpacity }, {
+          duration,
+          onChange: () => canvas.renderAll(),
+          onComplete: () => {
+            setTimeout(() => {
+              if ((obj as any).animationId === animationId) {
+                playObjectAnimation(obj, animationId, speed);
+              }
+            }, 1000);
+          }
+        });
+        break;
+
+      case "roll":
+        obj.set({ left: originalLeft - 200, angle: -360 });
+        obj.animate({ left: originalLeft, angle: originalAngle }, {
+          duration,
+          onChange: () => canvas.renderAll(),
+          onComplete: () => {
+            setTimeout(() => {
+              if ((obj as any).animationId === animationId) {
+                playObjectAnimation(obj, animationId, speed);
+              }
+            }, 1000);
+          }
+        });
+        break;
+
+      case "skate":
+        obj.set({ left: originalLeft - 150, top: originalTop - 50, opacity: 0 });
+        obj.animate({ left: originalLeft, top: originalTop, opacity: originalOpacity }, {
+          duration,
+          onChange: () => canvas.renderAll(),
+          onComplete: () => {
+            setTimeout(() => {
+              if ((obj as any).animationId === animationId) {
+                playObjectAnimation(obj, animationId, speed);
+              }
+            }, 1000);
+          }
+        });
+        break;
+
+      case "typewriter":
+        if (obj.type === "textbox" || obj.type === "text") {
+          const textObj = obj as fabric.Textbox;
+          const fullText = textObj.text || "";
+          textObj.set({ text: "" });
+          let charIndex = 0;
+          const charDuration = duration / fullText.length;
+          const interval = setInterval(() => {
+            if (charIndex < fullText.length) {
+              textObj.set({ text: fullText.substring(0, charIndex + 1) });
+              canvas.renderAll();
+              charIndex++;
+            } else {
+              clearInterval(interval);
+            }
+          }, charDuration);
+        }
+        break;
+    }
+  };
+
+
   useEffect(() => {
     if (!canvasRef.current) return;
 
@@ -75,100 +386,80 @@ const MiniCanva: React.FC<Props> = ({ action, onCanvasReady, onObjectSelected,se
       preserveObjectStacking: true,
     });
 
-    
+
     canvasInstance.current = canvas;
     managerRef.current = new CommandManager(canvas);
- if (onCanvasReady) onCanvasReady(canvas);
+    if (onCanvasReady) onCanvasReady(canvas);
 
-  canvas.on("selection:created", (e: any) => {
-  const obj = e.selected?.[0] || null;
-  if (onObjectSelected) onObjectSelected(obj);
-});
-canvas.on("selection:updated", (e: any) => {
-  const obj = e.selected?.[0] || null;
-  if (onObjectSelected) onObjectSelected(obj);
-});
-canvas.on("selection:cleared", () => {
-  if (onObjectSelected) onObjectSelected(null);
-});
-
-
-canvas.on("path:created", (e) => {
-  const path = e.path;
-
-  path.set({
-    stroke: canvas.freeDrawingBrush?.color || "#000",
-strokeWidth: canvas.freeDrawingBrush?.width || 3,
-// jo brush width hai
-    fill: "#00c4cc",   // fill after complete
-    selectable: true,
-    evented: true,
-  });
-
-  // back to selection mode
-  canvas.isDrawingMode = false;
-  canvas.selection = true;
-  canvas.forEachObject((obj) => (obj.selectable = true));
-  canvas.setActiveObject(path);
-  onObjectSelected?.(path);
-
-  canvas.requestRenderAll();
-});
-
-
-
-  // Selection
-    const handleSelection = (e: any) => {
+    canvas.on("selection:created", (e: any) => {
       const obj = e.selected?.[0] || null;
       if (onObjectSelected) onObjectSelected(obj);
-    };
-    canvas.on("selection:created", handleSelection);
-    canvas.on("selection:updated", handleSelection);
-    canvas.on("selection:cleared", () => onObjectSelected?.(null));
-
-    // Save baseline before modification
-    canvas.on("mouse:down", (opt: any) => {
-      const target = opt.target as fabric.Object | undefined;
-      if (target) prevStateMap.current.set(target, target.toObject());
+    });
+    canvas.on("selection:updated", (e: any) => {
+      const obj = e.selected?.[0] || null;
+      if (onObjectSelected) onObjectSelected(obj);
+    });
+    canvas.on("selection:cleared", () => {
+      if (onObjectSelected) onObjectSelected(null);
     });
 
+
+
+
+    // store object state when user presses mouse down (before transform)
+    canvas.on("mouse:down", (opt: any) => {
+      const target = opt.target as fabric.Object | undefined;
+      if (target) {
+        prevStateMap.current.set(target, target.toObject());
+      }
+    });
+
+    // selection events -> baseline state
+    canvas.on("selection:created", () => {
+      canvas.getActiveObjects().forEach((o) => prevStateMap.current.set(o, o.toObject()));
+    });
+    canvas.on("selection:updated", () => {
+      canvas.getActiveObjects().forEach((o) => prevStateMap.current.set(o, o.toObject()));
+    });
+
+    // when object modified (scale/rotate/move), create a modify command
     canvas.on("object:modified", (evt: any) => {
       const target = evt.target as fabric.Object;
       if (!target || !managerRef.current) return;
       const prev = prevStateMap.current.get(target) ?? null;
       const next = target.toObject();
+
+      // if no prev, store baseline and skip
       if (!prev) {
         prevStateMap.current.set(target, next);
         return;
       }
 
-      const cmd = {
+      const cmd: Command = {
         do: () => {
-          target.set(next);
-          target.setCoords();
-          canvas.requestRenderAll();
+          try {
+            target.set(next);
+            target.setCoords();
+            canvas.requestRenderAll();
+          } catch (e) {
+            /* ignore */
+          }
         },
         undo: () => {
-          target.set(prev);
-          target.setCoords();
-          canvas.requestRenderAll();
+          try {
+            target.set(prev);
+            target.setCoords();
+            canvas.requestRenderAll();
+          } catch (e) {
+            /* ignore */
+          }
         },
       };
+
       managerRef.current.execute(cmd);
       prevStateMap.current.delete(target);
     });
 
-    // Hover highlight
-    canvas.on("mouse:over", (e) => {
-      if (e.target) e.target.set({ strokeWidth: 2 });
-      canvas.requestRenderAll();
-    });
-    canvas.on("mouse:out", (e) => {
-      if (e.target) e.target.set({ strokeWidth: 1 });
-      canvas.requestRenderAll();
-    });
-
-    
     // keyboard shortcuts
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ctrl/Cmd + Z
@@ -185,17 +476,17 @@ strokeWidth: canvas.freeDrawingBrush?.width || 3,
       }
       // Delete / Backspace -> delete selected objects
       if (e.key === "Delete" || e.key === "Backspace") {
-     
-  const activeElement = document.activeElement;
 
-  if (
-    activeElement &&
-    (activeElement.tagName === "INPUT" ||
-     activeElement.tagName === "TEXTAREA" ||
-     (activeElement as HTMLElement).isContentEditable)
-  ) {
-    return; // kuch na karo, normal input behavior
-  }
+        const activeElement = document.activeElement;
+
+        if (
+          activeElement &&
+          (activeElement.tagName === "INPUT" ||
+            activeElement.tagName === "TEXTAREA" ||
+            (activeElement as HTMLElement).isContentEditable)
+        ) {
+          return;
+        }
         e.preventDefault();
         const selected = canvas.getActiveObjects();
         if (selected && selected.length) {
@@ -222,8 +513,39 @@ strokeWidth: canvas.freeDrawingBrush?.width || 3,
     };
 
 
+    // Play animations on load
+    const playAllAnimations = () => {
+      const objects = canvas.getObjects();
+      objects.forEach((obj) => {
+        const animId = (obj as any).animationId;
+        const animSpeed = (obj as any).animationSpeed || 1;
+        const appearOnClick = (obj as any).appearOnClick;
 
-    
+        if (animId && !appearOnClick) {
+          setTimeout(() => {
+            playObjectAnimation(obj, animId, animSpeed);
+          }, 300);
+        }
+      });
+    };
+
+    setTimeout(playAllAnimations, 500);
+    // When object is added, play its animation
+    canvas.on('object:added', (e: any) => {
+      const obj = e.target;
+      const animId = (obj as any).animationId;
+      const animSpeed = (obj as any).animationSpeed || 1;
+      const appearOnClick = (obj as any).appearOnClick;
+
+      if (animId && !appearOnClick) {
+        setTimeout(() => {
+          playObjectAnimation(obj, animId, animSpeed);
+        }, 100);
+      }
+    });
+
+
+
     document.addEventListener("keydown", handleKeyDown);
 
     // cleanup
@@ -236,6 +558,8 @@ strokeWidth: canvas.freeDrawingBrush?.width || 3,
   }, []);
 
 
+
+
   // handle incoming actions from Sidebar / parent
   useEffect(() => {
     if (!action) return;
@@ -243,8 +567,73 @@ strokeWidth: canvas.freeDrawingBrush?.width || 3,
     const manager = managerRef.current;
     if (!canvas || !manager) return;
     const { type, payload } = action;
-
     switch (type) {
+      case "LOAD_TEMPLATE": {
+        const { template, snapshot, prevSize, prevBg } = payload;
+        const elements = template.elements;
+        const size = template.size;
+
+        console.log("Loading template:", template);
+        console.log("Elements to load:", elements);
+
+        const cmd: Command = {
+          do: async () => {
+            try {
+              // Clear canvas
+              canvas.clear();
+              canvas.backgroundColor = "#ffffff";
+
+              // Set canvas dimensions
+              if (size) {
+                canvas.setDimensions(size);
+                console.log("Canvas resized to:", size);
+              }
+
+              // Load elements sequentially
+              const loadedObjects = [];
+              for (const el of elements) {
+                const obj = await addElementToCanvas(el, canvas);
+                if (obj) {
+                  loadedObjects.push(obj);
+                }
+              }
+
+              console.log("Loaded objects:", loadedObjects.length);
+
+              // Final render
+              canvas.requestRenderAll();
+
+              // Debug: canvas state after loading
+              console.log("Canvas objects after loading:", canvas.getObjects().length);
+
+            } catch (error) {
+              console.error("Template loading failed:", error);
+            }
+          },
+          undo: async () => {
+            try {
+              await restoreFromJSON(canvas, snapshot);
+              if (prevSize) {
+                canvas.setDimensions(prevSize);
+                canvas.backgroundColor = prevBg || "#ffffff";
+              }
+              canvas.requestRenderAll();
+            } catch (error) {
+              console.error("Template undo failed:", error);
+            }
+          }
+        };
+
+        manager.execute(cmd);
+        break;
+      }
+      
+      case "ADD_TEMPLATE_ELEMENTS":
+        if (action.type === "ADD_TEMPLATE_ELEMENTS" && Array.isArray(action.payload)) {
+          canvas.clear();
+          action.payload.forEach((el: any) => addElementToCanvas(el, canvas));
+        }
+        break;
       // ADD TEXT
       case "ADD_TEXT": {
         const t = new Textbox("New Text", { left: 100, top: 100, fontSize: 24, fill: "#000" });
@@ -264,188 +653,189 @@ strokeWidth: canvas.freeDrawingBrush?.width || 3,
       }
 
 
-// ADD SHAPE
-case "ADD_SHAPE": {
-  let obj: fabric.Object | null = null;
+      // ADD SHAPE
+      case "ADD_SHAPE": {
 
-  // 1) Normal shapes
-  if (typeof payload === "string" &&
-      !payload.startsWith("http") &&
-      !payload.startsWith("/")) {
-    switch (payload) {
-      case "rect":
-        obj = new fabric.Rect({
-          left: 150, top: 150,
-          width: 120, height: 80,
-          fill: "lightblue"
-        });
-        break;
+        let obj: fabric.Object | null = null;
 
-      case "circle":
-        obj = new fabric.Circle({
-          left: 200, top: 200,
-          radius: 50,
-          fill: "lightgreen"
-        });
-        break;
+        // 1) Normal shapes
+        if (typeof payload === "string" &&
+          !payload.startsWith("http") &&
+          !payload.startsWith("/")) {
+          switch (payload) {
+            case "rect":
+              obj = new fabric.Rect({
+                left: 150, top: 150,
+                width: 120, height: 80,
+                fill: "lightblue"
+              });
+              break;
 
-      case "triangle":
-        obj = new fabric.Triangle({
-          left: 250, top: 250,
-          width: 100, height: 100,
-          fill: "lightpink"
-        });
-        break;
+            case "circle":
+              obj = new fabric.Circle({
+                left: 200, top: 200,
+                radius: 50,
+                fill: "lightgreen"
+              });
+              break;
 
-      case "diamond":
-        obj = new fabric.Polygon(
-          [
-            { x: 50, y: 0 },
-            { x: 100, y: 50 },
-            { x: 50, y: 100 },
-            { x: 0, y: 50 },
-          ],
-          { left: 300, top: 300, fill: "purple" }
-        );
-        break;
-        
-      case "star": {
-        const pts = Array.from({ length: 5 }, (_, i) => {
-          const a = (i * 72 - 90) * (Math.PI / 180);
-          return { x: 50 * Math.cos(a), y: 50 * Math.sin(a) };
-        });
-        obj = new fabric.Polygon(pts, {
-          left: 300, top: 300, fill: "yellow"
-        });
-        break;
-      }
+            case "triangle":
+              obj = new fabric.Triangle({
+                left: 250, top: 250,
+                width: 100, height: 100,
+                fill: "lightpink"
+              });
+              break;
 
-      case "heart":
-        obj = new fabric.Path(
-          "M12,21.35l-1.45-1.32C5.4,15.36,2,12.28,2,8.5 " +
-          "C2,5.42,4.42,3,7.5,3c1.74,0,3.41,0.81,4.5,2.09" +
-          "C13.09,3.81,14.76,3,16.5,3 " +
-          "C19.58,3,22,5.42,22,8.5c0,3.78-3.4,6.86-8.55,11.54" +
-          "L12,21.35z",
-          { left: 300, top: 300, fill: "red", scaleX: 3, scaleY: 3 }
-        );
-        break;
-        
-        
-    }
+            case "diamond":
+              obj = new fabric.Polygon(
+                [
+                  { x: 50, y: 0 },
+                  { x: 100, y: 50 },
+                  { x: 50, y: 100 },
+                  { x: 0, y: 50 },
+                ],
+                { left: 300, top: 300, fill: "purple" }
+              );
+              break;
 
-    if (obj && canvas && manager) {
-      const cmd: Command = {
-        do: () => {
-          canvas.add(obj!);
-          canvas.setActiveObject(obj!);
-          canvas.requestRenderAll();
-        },
-        undo: () => {
-          canvas.remove(obj!);
-          canvas.requestRenderAll();
-        },
-      };
-      manager.execute(cmd);
-    }
-  }
-
-  // 2) JSON objects
-  else if (payload && typeof payload === "object" && payload.objects) {
-    fabric.util.enlivenObjects(payload.objects).then((objects: any[]) => {
-      if (canvas && manager) {
-        const cmd: Command = {
-          do: () => {
-            objects.forEach((obj, i) => {
-              obj.set({ left: 200 + i * 10, top: 200 + i * 10 });
-              canvas.add(obj);
-            });
-            if (objects.length > 0) {
-              canvas.setActiveObject(objects[0]);
+            case "star": {
+              const pts = Array.from({ length: 5 }, (_, i) => {
+                const a = (i * 72 - 90) * (Math.PI / 180);
+                return { x: 50 * Math.cos(a), y: 50 * Math.sin(a) };
+              });
+              obj = new fabric.Polygon(pts, {
+                left: 300, top: 300, fill: "yellow"
+              });
+              break;
             }
-            canvas.requestRenderAll();
-          },
-          undo: () => {
-            objects.forEach((obj) => canvas.remove(obj));
-            canvas.requestRenderAll();
-          },
-        };
-        manager.execute(cmd);
-      }
-    });
-  }
+
+            case "heart":
+              obj = new fabric.Path(
+                "M12,21.35l-1.45-1.32C5.4,15.36,2,12.28,2,8.5 " +
+                "C2,5.42,4.42,3,7.5,3c1.74,0,3.41,0.81,4.5,2.09" +
+                "C13.09,3.81,14.76,3,16.5,3 " +
+                "C19.58,3,22,5.42,22,8.5c0,3.78-3.4,6.86-8.55,11.54" +
+                "L12,21.35z",
+                { left: 300, top: 300, fill: "red", scaleX: 3, scaleY: 3 }
+              );
+              break;
 
 
+          }
 
-  // 3) SVG (import and add each path as an individual object)
-else if (payload && typeof payload === "object" && payload.type === "svg") {
-  (async () => {
-    const { objects, options } = await fabric.loadSVGFromString(payload.data);
-    if (canvas && manager) {
-      objects.forEach((obj) => {
-        if (obj && typeof obj.set === "function") {
-          obj.set({
-            left: 200,
-            top: 200,
-            originX: "center",
-            originY: "center",
-            selectable: true,
-            evented: true,
+          if (obj && canvas && manager) {
+            const cmd: Command = {
+              do: () => {
+                canvas.add(obj!);
+                canvas.setActiveObject(obj!);
+                canvas.requestRenderAll();
+              },
+              undo: () => {
+                canvas.remove(obj!);
+                canvas.requestRenderAll();
+              },
+            };
+            manager.execute(cmd);
+          }
+        }
+
+        // 2) JSON objects
+        else if (payload && typeof payload === "object" && payload.objects) {
+          fabric.util.enlivenObjects(payload.objects).then((objects: any[]) => {
+            if (canvas && manager) {
+              const cmd: Command = {
+                do: () => {
+                  objects.forEach((obj, i) => {
+                    obj.set({ left: 200 + i * 10, top: 200 + i * 10 });
+                    canvas.add(obj);
+                  });
+                  if (objects.length > 0) {
+                    canvas.setActiveObject(objects[0]);
+                  }
+                  canvas.requestRenderAll();
+                },
+                undo: () => {
+                  objects.forEach((obj) => canvas.remove(obj));
+                  canvas.requestRenderAll();
+                },
+              };
+              manager.execute(cmd);
+            }
           });
-          obj.padding = 0;           
-          obj.strokeUniform = true;  
-          obj.setCoords();          
-
-          const cmd: Command = {
-            do: () => {
-              canvas.add(obj);
-              canvas.setActiveObject(obj);
-              canvas.requestRenderAll();
-            },
-            undo: () => {
-              canvas.remove(obj);
-              canvas.requestRenderAll();
-            },
-          };
-          manager.execute(cmd);
         }
-      });
-    }
-  })();
-}
 
+        // 3) SVG
 
+        // 3) SVG (import and add each path as an individual object)
+        else if (payload && typeof payload === "object" && payload.type === "svg") {
+          (async () => {
+            const { objects, options } = await fabric.loadSVGFromString(payload.data);
+            if (canvas && manager) {
+              objects.forEach((obj) => {
+                if (obj && typeof obj.set === "function") {
+                  obj.set({
+                    left: 200,
+                    top: 200,
+                    originX: "center",
+                    originY: "center",
+                    selectable: true,
+                    evented: true,
+                  });
+                  obj.padding = 0;
+                  obj.strokeUniform = true;
+                  obj.setCoords();
 
-  // 4) Images
-  else if (typeof payload === "string" &&
-           (payload.startsWith("http") || payload.startsWith("/"))) {
-    fabric.Image.fromURL(payload, { crossOrigin: "anonymous" })
-      .then((img) => {
-        if (img && canvas && manager) {
-          img.scaleToWidth(200);
-          img.set({ left: 200, top: 200 });
-
-          const cmd: Command = {
-            do: () => {
-              canvas.add(img);
-              canvas.setActiveObject(img);
-              canvas.requestRenderAll();
-            },
-            undo: () => {
-              canvas.remove(img);
-              canvas.requestRenderAll();
-            },
-          };
-          manager.execute(cmd);
+                  const cmd: Command = {
+                    do: () => {
+                      canvas.add(obj);
+                      canvas.setActiveObject(obj);
+                      canvas.requestRenderAll();
+                    },
+                    undo: () => {
+                      canvas.remove(obj);
+                      canvas.requestRenderAll();
+                    },
+                  };
+                  manager.execute(cmd);
+                }
+              });
+            }
+          })();
         }
-      })
-      .catch((err) => {
-        console.error("Image load error:", err);
-      });
-  }
 
-  break;
-}
+
+
+        // 4) Images
+        else if (typeof payload === "string" &&
+          (payload.startsWith("http") || payload.startsWith("/"))) {
+          fabric.Image.fromURL(payload, { crossOrigin: "anonymous" })
+            .then((img) => {
+              if (img && canvas && manager) {
+                img.scaleToWidth(200);
+                img.set({ left: 200, top: 200 });
+
+                const cmd: Command = {
+                  do: () => {
+                    canvas.add(img);
+                    canvas.setActiveObject(img);
+                    canvas.requestRenderAll();
+                  },
+                  undo: () => {
+                    canvas.remove(img);
+                    canvas.requestRenderAll();
+                  },
+                };
+                manager.execute(cmd);
+              }
+            })
+            .catch((err) => {
+              console.error("Image load error:", err);
+            });
+        }
+
+        break;
+      }
 
 
 
@@ -474,53 +864,7 @@ else if (payload && typeof payload === "object" && payload.type === "svg") {
           });
         }
         break;
-
-
       }
-
-case "TOGGLE_DRAW": {
-  if (!canvas) return;
-
-  const isDraw = !!payload;
-  canvas.isDrawingMode = isDraw;
-  canvas.selection = !isDraw;
-
-  // Objects selectable only if not drawing
-  canvas.forEachObject((obj) => (obj.selectable = !isDraw));
-  if (isDraw) {
-    if (!canvas.freeDrawingBrush) canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
-    canvas.freeDrawingBrush.width = 3;
-    canvas.freeDrawingBrush.color = "#000"; 
-
-
-    canvas.on("path:created", (e) => {
-      const path = e.path;
-
-      path.set({
-        strokeWidth: 3,
-        stroke: "#000",
-        fill: "#00c4cc", 
-        selectable: true,
-        evented: true,
-      });
-      canvas.isDrawingMode = false;
-      canvas.selection = true;
-
-      canvas.forEachObject((obj) => (obj.selectable = true));
-
-      canvas.setActiveObject(path);
-      onObjectSelected?.(path);
-
-      canvas.requestRenderAll();
-    });
-  } else {
-    canvas.off("path:created");
-  }
-  canvas.requestRenderAll();
-  break;
-}
-
-
 
       // CLEAR (store full JSON for undo)
       case "CLEAR": {
@@ -546,6 +890,25 @@ case "TOGGLE_DRAW": {
       case "REDO":
         manager.redo();
         break;
+
+      case "RESIZE": {
+        const { width, height } = payload;
+        const prevWidth = canvas.width;
+        const prevHeight = canvas.height;
+
+        const cmd: Command = {
+          do: () => {
+            canvas.setDimensions({ width, height });
+            canvas.requestRenderAll();
+          },
+          undo: () => {
+            canvas.setDimensions({ width: prevWidth, height: prevHeight });
+            canvas.requestRenderAll();
+          },
+        };
+        manager.execute(cmd);
+        break;
+      }
 
       // BRING FORWARD
       case "BRING_FORWARD": {
@@ -663,13 +1026,6 @@ case "TOGGLE_DRAW": {
         break;
       }
 
-   case "TOGGLE_DRAW":
-    canvas.isDrawingMode = !!payload;
-    canvas.selection = !canvas.isDrawingMode;
-    canvas.forEachObject((obj) => (obj.selectable = !canvas.isDrawingMode));
-    canvas.requestRenderAll();
-    break;
-    
       case "CHANGE_STROKE": {
         const active = canvas.getActiveObject() as any;
         if (active) {
@@ -754,59 +1110,59 @@ case "TOGGLE_DRAW": {
         break;
       }
 
-
-      
       // EXPORT
-    //   case "EXPORT": {
-    //     const dataUrl = canvas.toDataURL({ format: "png", quality: 1, multiplier: 1 });
-    //     const a = document.createElement("a");
-    //     a.href = dataUrl;
-    //     a.download = "canvas.png";
-    //     a.click();
-    //     break;
-    //   }
+      //   case "EXPORT": {
+      //     const dataUrl = canvas.toDataURL({ format: "png", quality: 1, multiplier: 1 });
+      //     const a = document.createElement("a");
+      //     a.href = dataUrl;
+      //     a.download = "canvas.png";
+      //     a.click();
+      //     break;
+      //   }
 
-    //   default:
-    //     break;
-    // }
-// EXPORT
-case "EXPORT": {
-  if (!payload) return;
+      //   default:
+      //     break;
+      // }
+      // EXPORT
+      case "EXPORT": {
+        if (!payload) return;
 
-  if (payload === "png" || payload === "jpg") {
-    const dataUrl = canvas.toDataURL({
-      format: payload,
-      quality: 1,
-      multiplier: 2, // High resolution
-    });
-    const a = document.createElement("a");
-    a.href = dataUrl;
-    a.download = `canvas.${payload}`;
-    a.click();
-  }
+        if (payload === "png" || payload === "jpg") {
+          const dataUrl = canvas.toDataURL({
+            format: payload,
+            quality: 1,
+            multiplier: 2, // High resolution
+          });
+          const a = document.createElement("a");
+          a.href = dataUrl;
+          a.download = `canvas.${payload}`;
+          a.click();
+        }
 
-  if (payload === "svg") {
-    const svgData = canvas.toSVG();
-    const blob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "canvas.svg";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+        if (payload === "svg") {
+          const svgData = canvas.toSVG();
+          const blob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "canvas.svg";
+          a.click();
+          URL.revokeObjectURL(url);
+        }
 
-  if (payload === "pdf") {
-    import("jspdf").then((jsPDF) => {
-      const doc = new jsPDF.jsPDF("l", "pt", [canvas.width!, canvas.height!]);
-      const dataUrl = canvas.toDataURL({ format: "png", quality: 1, multiplier: 2 });
-      doc.addImage(dataUrl, "PNG", 0, 0, canvas.width!, canvas.height!);
-      doc.save("canvas.pdf");
-    });
-  }
+        if (payload === "pdf") {
+          import("jspdf").then((jsPDF) => {
+            const doc = new jsPDF.jsPDF("l", "pt", [canvas.width!, canvas.height!]);
+            const dataUrl = canvas.toDataURL({ format: "png", quality: 1, multiplier: 2 });
+            doc.addImage(dataUrl, "PNG", 0, 0, canvas.width!, canvas.height!);
+            doc.save("canvas.pdf");
+          });
+        }
 
-  break;
-}
+        break;
+      }
+
+
 
     }
   }, [action]);

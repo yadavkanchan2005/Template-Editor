@@ -6,6 +6,11 @@ import {
   Typography,
   Button,
   Box,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
 } from "@mui/material";
 import { styled } from "@mui/material/styles";
 import UndoIcon from "@mui/icons-material/Undo";
@@ -13,12 +18,15 @@ import RedoIcon from "@mui/icons-material/Redo";
 import ClearAllIcon from "@mui/icons-material/ClearAll";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import SaveIcon from "@mui/icons-material/Save";
+import AspectRatioIcon from "@mui/icons-material/AspectRatio";
 import Sidebar from "./Sidebar";
 import MiniCanva from "./MiniCanva";
 import RectanglePropertiesPanel from "./RectanglePropertiesPanel";
 import TextPropertiesPanel from "./TextPropertiesPanel";
+import DynamicElementsPanel from "./panal/DynamicElementsPanel";
+import AnimationPanel from "./AnimationSidebar/AnimationPanel";
 import CommandManager from "@/lib/CommandManager";
-import TemplatePanel from "./TemplatePanel";
+import TemplatePanel from "./panal/TemplatePanel";
 import * as fabric from "fabric";
 
 const CanvaHeader = styled(AppBar)(({ theme }) => ({
@@ -45,8 +53,7 @@ const CanvasContainer = styled(Box)(() => ({
   borderRadius: "12px",
   boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
   padding: "20px",
-  maxWidth: 960,
-  width: "100%",
+  display: "inline-block",
 }));
 
 const PropertiesPanelWrapper = styled(Box)(({ theme }) => ({
@@ -74,6 +81,10 @@ const CanvasEditor: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [propertyTab, setPropertyTab] = useState("rectangle");
   const [drawMode, setDrawMode] = useState(false);
+  const [resizeDialogOpen, setResizeDialogOpen] = useState(false);
+  const [canvasSize, setCanvasSize] = useState({ width: 900, height: 600 });
+  const [activePanel, setActivePanel] = useState<string | null>(null); // NEW: track active overlay panel
+  
 
   useEffect(() => setMounted(true), []);
 
@@ -85,7 +96,7 @@ const CanvasEditor: React.FC = () => {
       case "rect":
       case "circle":
       case "polygon":
-         case "path": 
+      case "path":
         setPropertyTab("rectangle");
         break;
       case "textbox":
@@ -103,18 +114,8 @@ const CanvasEditor: React.FC = () => {
     if (!canvasInstance || !manager) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Undo - Ctrl+Z
-      if (e.ctrlKey && e.key.toLowerCase() === "z") {
-        e.preventDefault();
-        manager.undo();
-      }
-      // Redo - Ctrl+Y / Ctrl+Shift+Z
-      if ((e.ctrlKey && e.key.toLowerCase() === "y") ||
-          (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "z")) {
-        e.preventDefault();
-        manager.redo();
-      }
-      // Select All - Ctrl+A
+      if (e.ctrlKey && e.key.toLowerCase() === "z") { e.preventDefault(); manager.undo(); }
+      if ((e.ctrlKey && e.key.toLowerCase() === "y") || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "z")) { e.preventDefault(); manager.redo(); }
       if (e.ctrlKey && e.key.toLowerCase() === "a") {
         e.preventDefault();
         canvasInstance.discardActiveObject();
@@ -122,13 +123,11 @@ const CanvasEditor: React.FC = () => {
         canvasInstance.setActiveObject(sel);
         canvasInstance.requestRenderAll();
       }
-      // Copy - Ctrl+C
       if (e.ctrlKey && e.key.toLowerCase() === "c") {
         e.preventDefault();
         const active = canvasInstance.getActiveObject();
         if (active) active.clone().then((cloned: fabric.Object) => (window as any)._clipboard = cloned);
       }
-      // Paste - Ctrl+V
       if (e.ctrlKey && e.key.toLowerCase() === "v") {
         e.preventDefault();
         const clipboard = (window as any)._clipboard;
@@ -148,10 +147,16 @@ const CanvasEditor: React.FC = () => {
   }, [canvasInstance, manager]);
 
   // Handlers
-const handleDrawMode = () => {
-  setDrawMode((prev) => !prev);
-  setAction({ type: "TOGGLE_DRAW", payload: !drawMode });
-};
+  const handleDrawMode = () => {
+    setDrawMode((prev) => !prev);
+    setAction({ type: "TOGGLE_DRAW", payload: !drawMode });
+  };
+
+  const handleResize = (width: number, height: number) => {
+    setCanvasSize({ width, height });
+    setAction({ type: "RESIZE", payload: { width, height } });
+    setResizeDialogOpen(false);
+  };
 
   const handlers = {
     onAddText: () => {
@@ -176,7 +181,6 @@ const handleDrawMode = () => {
     onExport: (format: string) => setAction({ type: "EXPORT", payload: format }),
     setActiveCategory,
     handleDrawMode,
-    
   };
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -194,15 +198,34 @@ const handleDrawMode = () => {
     onBringToFront: handlers.onBringToFront,
     onSendToBack: handlers.onSendToBack,
     onSelectCategory: handlers.setActiveCategory,
-  onDrawMode: handlers.handleDrawMode, 
-    
+    onDrawMode: handlers.handleDrawMode,
+    setActivePanel, 
   };
 
-  const handleTemplateSelect = (templateData: any) => {
-    if (!canvasInstance) return;
-    canvasInstance.loadFromJSON(templateData, () => canvasInstance.renderAll());
-    setActiveCategory(null);
-  };
+
+const handleTemplateSelect = (templateData: any) => {
+  if (!canvasInstance) return;
+  
+  console.log("Template selected:", templateData); 
+  
+  // Current canvas state store karo (for undo)
+  const snapshot = canvasInstance.toJSON();
+  const prevSize = { width: canvasInstance.width, height: canvasInstance.height };
+  const prevBg = canvasInstance.backgroundColor;
+  
+  // MiniCanva ko proper action send karo
+  setAction({
+    type: "LOAD_TEMPLATE",
+    payload: {
+      template: templateData,
+      snapshot: snapshot,
+      prevSize: prevSize,
+      prevBg: prevBg
+    }
+  });
+  
+  setActiveCategory(null);
+}
 
   if (!mounted) return null;
 
@@ -225,6 +248,9 @@ const handleDrawMode = () => {
           <Box sx={{ display: "flex", alignItems: "center" }}>
             <HeaderButton startIcon={<UndoIcon />} onClick={handlers.onUndo}>Undo</HeaderButton>
             <HeaderButton startIcon={<RedoIcon />} onClick={handlers.onRedo}>Redo</HeaderButton>
+            <HeaderButton startIcon={<AspectRatioIcon />} onClick={() => setResizeDialogOpen(true)}>
+              Resize
+            </HeaderButton>
             <HeaderButton startIcon={<SaveIcon />} onClick={handleSave}>Save</HeaderButton>
             <Button startIcon={<UploadFileIcon />} component="label">
               Upload
@@ -239,6 +265,32 @@ const handleDrawMode = () => {
         </Toolbar>
       </CanvaHeader>
 
+      {/* Resize Dialog */}
+      <Dialog open={resizeDialogOpen} onClose={() => setResizeDialogOpen(false)}>
+        <DialogTitle>Canvas Size</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1, minWidth: 300 }}>
+            <TextField label="Width" type="number" defaultValue={canvasSize.width} id="canvas-width" fullWidth inputProps={{ min: 100, max: 5000 }} />
+            <TextField label="Height" type="number" defaultValue={canvasSize.height} id="canvas-height" fullWidth inputProps={{ min: 100, max: 5000 }} />
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <Button size="small" variant="outlined" onClick={() => { (document.getElementById('canvas-width') as HTMLInputElement).value = '1920'; (document.getElementById('canvas-height') as HTMLInputElement).value = '1080'; }}>1920×1080</Button>
+              <Button size="small" variant="outlined" onClick={() => { (document.getElementById('canvas-width') as HTMLInputElement).value = '1080'; (document.getElementById('canvas-height') as HTMLInputElement).value = '1080'; }}>1080×1080</Button>
+              <Button size="small" variant="outlined" onClick={() => { (document.getElementById('canvas-width') as HTMLInputElement).value = '1080'; (document.getElementById('canvas-height') as HTMLInputElement).value = '1920'; }}>1080×1920</Button>
+              <Button size="small" variant="outlined" onClick={() => { (document.getElementById('canvas-width') as HTMLInputElement).value = '800'; (document.getElementById('canvas-height') as HTMLInputElement).value = '600'; }}>800×600</Button>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setResizeDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={() => {
+            const w = parseInt((document.getElementById('canvas-width') as HTMLInputElement).value);
+            const h = parseInt((document.getElementById('canvas-height') as HTMLInputElement).value);
+            if (w >= 100 && h >= 100 && w <= 5000 && h <= 5000) handleResize(w, h);
+            else alert("Please enter valid dimensions (100-5000)");
+          }}>Apply</Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Property Panel */}
       <PropertiesPanelWrapper>{renderPropertyPanel()}</PropertiesPanelWrapper>
 
@@ -250,13 +302,50 @@ const handleDrawMode = () => {
           <CanvasContainer>
             <MiniCanva
               action={action}
-              onCanvasReady={(canvas: fabric.Canvas) => {
-                setCanvasInstance(canvas);
-                setManager(new CommandManager(canvas));
-              }}
+              onCanvasReady={(canvas: fabric.Canvas) => { setCanvasInstance(canvas); setManager(new CommandManager(canvas)); }}
               onObjectSelected={setSelectedObject}
             />
           </CanvasContainer>
+
+          {/* Overlay Panels */}
+          {activePanel === "elements" && (
+            <Box
+              sx={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                zIndex: 50,
+              }}
+            >
+              <DynamicElementsPanel
+                onAddElement={(data: any) => {
+                  if (canvasInstance) {
+                    // Add element logic
+                  }
+                  setActivePanel(null); 
+                }}
+                onClose={() => setActivePanel(null)}
+              />
+            </Box>
+          )}
+
+
+          {activePanel === "animation" && selectedObject && (
+            <Box
+              sx={{
+                position: "absolute",
+                top: 0,
+                right: 0,
+                zIndex: 50,
+              }}
+            >
+              <AnimationPanel
+                canvas={canvasInstance}
+                selectedObject={selectedObject}
+                onClose={() => setActivePanel(null)}
+              />
+            </Box>
+          )}
         </Box>
 
         {activeCategory === "templates" && (
