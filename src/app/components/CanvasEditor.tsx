@@ -82,32 +82,47 @@ const CanvasEditor: React.FC = () => {
   const [propertyTab, setPropertyTab] = useState("rectangle");
   const [drawMode, setDrawMode] = useState(false);
   const [resizeDialogOpen, setResizeDialogOpen] = useState(false);
-  const [canvasSize, setCanvasSize] = useState({ width: 900, height: 600 });
-  const [activePanel, setActivePanel] = useState<string | null>(null); // NEW: track active overlay panel
+  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
+  const [activePanel, setActivePanel] = useState<string | null>(null); 
   
 
   useEffect(() => setMounted(true), []);
+useEffect(() => {
+  console.log("🔄 Selected object changed:", selectedObject?.type || "null");
+  
+  if (!selectedObject) {
+    setPropertyTab("rectangle"); // default
+    return;
+  }
 
-  // Update property panel when object selected
-  useEffect(() => {
-    if (!selectedObject) return;
-
-    switch (selectedObject.type) {
-      case "rect":
-      case "circle":
-      case "polygon":
-      case "path":
-        setPropertyTab("rectangle");
-        break;
-      case "textbox":
-      case "text":
-        setPropertyTab("text");
-        break;
-      default:
-        setPropertyTab("rectangle");
-        break;
-    }
-  }, [selectedObject]);
+  // Determine which panel to show based on object type
+  let panelType = "rectangle"; // default
+  
+  switch (selectedObject.type) {
+    case "textbox":
+    case "text":
+    case "i-text":
+      panelType = "text";
+      console.log(" Opening Text Panel");
+      break;
+      
+    // All shape types -> Rectangle panel
+    case "rect":
+    case "rectangle":
+    case "circle":
+    case "polygon":
+    case "path":
+    case "triangle":
+    case "image":
+    case "group":
+    default:
+      panelType = "rectangle";
+      console.log("Opening Rectangle Panel");
+      break;
+  }
+  
+  setPropertyTab(panelType);
+}, [selectedObject]);
 
   // Keyboard Shortcuts
   useEffect(() => {
@@ -159,29 +174,51 @@ const CanvasEditor: React.FC = () => {
   };
 
   const handlers = {
-    onAddText: () => {
-      if (!canvasInstance) return;
-      const textbox = new fabric.Textbox("New Text", { left: 100, top: 100, fontSize: 24, fill: "#7c3aed" });
-      canvasInstance.add(textbox);
-      canvasInstance.setActiveObject(textbox);
-      canvasInstance.requestRenderAll();
-      setSelectedObject(textbox);
-      setPropertyTab("text");
-    },
-    onAddShape: (payload: any) => setAction({ type: "ADD_SHAPE", payload }),
-    onDelete: () => setAction({ type: "DELETE" }),
-    onUndo: () => setAction({ type: "UNDO" }),
-    onRedo: () => setAction({ type: "REDO" }),
-    onClear: () => setAction({ type: "CLEAR" }),
-    onBringForward: () => setAction({ type: "BRING_FORWARD" }),
-    onSendBackward: () => setAction({ type: "SEND_BACKWARD" }),
-    onBringToFront: () => setAction({ type: "BRING_TO_FRONT" }),
-    onSendToBack: () => setAction({ type: "SEND_TO_BACK" }),
-    onUpload: (file: File) => setAction({ type: "UPLOAD", payload: file }),
-    onExport: (format: string) => setAction({ type: "EXPORT", payload: format }),
-    setActiveCategory,
-    handleDrawMode,
-  };
+   onAddText: () => {
+    if (!canvasInstance) return;
+    const textbox = new fabric.Textbox("New Text", { 
+      left: 100, top: 100, fontSize: 24, fill: "#7c3aed" 
+    });
+    canvasInstance.add(textbox);
+    canvasInstance.setActiveObject(textbox);
+    canvasInstance.requestRenderAll();
+    setSelectedObject(textbox); 
+    setPropertyTab("text");
+  },
+  onAddShape: (payload: any) => {
+    // Check if it's a template load
+    if (payload && payload.type === "LOAD_TEMPLATE") {
+      const snapshot = canvasInstance?.toJSON();
+      const prevSize = canvasInstance ? { width: canvasInstance.width, height: canvasInstance.height } : null;
+      const prevBg = canvasInstance?.backgroundColor;
+      
+      setAction({ 
+        type: "LOAD_TEMPLATE", 
+        payload: {
+          template: payload.template,
+          snapshot,
+          prevSize,
+          prevBg
+        }
+      });
+    } else {
+      // Normal shape add
+setAction({ type: "ADD_SHAPE", payload });
+    }
+  },
+  onDelete: () => setAction({ type: "DELETE" }),
+  onUndo: () => setAction({ type: "UNDO" }),
+  onRedo: () => setAction({ type: "REDO" }),
+  onClear: () => setAction({ type: "CLEAR" }),
+  onBringForward: () => setAction({ type: "BRING_FORWARD" }),
+  onSendBackward: () => setAction({ type: "SEND_BACKWARD" }),
+  onBringToFront: () => setAction({ type: "BRING_TO_FRONT" }),
+  onSendToBack: () => setAction({ type: "SEND_TO_BACK" }),
+  onUpload: (file: File) => setAction({ type: "UPLOAD", payload: file }),
+  onExport: (format: string) => setAction({ type: "EXPORT", payload: format }),
+  setActiveCategory,
+  handleDrawMode,
+};
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) handlers.onUpload(e.target.files[0]);
@@ -304,32 +341,26 @@ const handleTemplateSelect = (templateData: any) => {
               action={action}
               onCanvasReady={(canvas: fabric.Canvas) => { setCanvasInstance(canvas); setManager(new CommandManager(canvas)); }}
               onObjectSelected={setSelectedObject}
+               setSelectedObject={setSelectedObject}
             />
           </CanvasContainer>
 
           {/* Overlay Panels */}
           {activePanel === "elements" && (
-            <Box
-              sx={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                zIndex: 50,
-              }}
-            >
-              <DynamicElementsPanel
-                onAddElement={(data: any) => {
-                  if (canvasInstance) {
-                    // Add element logic
-                  }
-                  setActivePanel(null); 
-                }}
-                onClose={() => setActivePanel(null)}
-              />
-            </Box>
-          )}
-
-
+  <Box sx={{ position: "absolute", top: 0, left: 0, zIndex: 50 }}>
+    <DynamicElementsPanel
+      onAddElement={(actionData: any) => {
+        console.log(" Element action received:", actionData);
+        setAction(actionData);
+        setTimeout(() => {
+          setActivePanel(null);
+        }, 100);
+      }}
+      onClose={() => setActivePanel(null)}
+    />
+  </Box>
+)}
+          
           {activePanel === "animation" && selectedObject && (
             <Box
               sx={{

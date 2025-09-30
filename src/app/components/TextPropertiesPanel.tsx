@@ -1,95 +1,86 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import * as fabric from "fabric";
-import { Select, MenuItem, TextField, Tooltip, IconButton, InputLabel, FormControl, Slider, Autocomplete,InputAdornment} from "@mui/material";
+import {
+    Select, MenuItem, TextField, Tooltip, IconButton, Box,
+    InputLabel, FormControl, Slider, Autocomplete, InputAdornment
+} from "@mui/material";
 import FormatColorFillIcon from "@mui/icons-material/FormatColorFill";
 import BorderColorIcon from "@mui/icons-material/BorderColor";
-import { styled } from '@mui/material/styles';
+import FormatBoldIcon from "@mui/icons-material/FormatBold";
+import FormatItalicIcon from "@mui/icons-material/FormatItalic";
+import FormatUnderlinedIcon from "@mui/icons-material/FormatUnderlined";
+import FormatAlignLeftIcon from "@mui/icons-material/FormatAlignLeft";
+import FormatAlignCenterIcon from "@mui/icons-material/FormatAlignCenter";
+import FormatAlignRightIcon from "@mui/icons-material/FormatAlignRight";
+import AnimationIcon from "@mui/icons-material/Animation";
+import SpacingIcon from '@mui/icons-material/FormatLineSpacing';
+import Popover from '@mui/material/Popover';
 import ReplayIcon from "@mui/icons-material/Replay";
-import { Tabs, Tab, Box } from "@mui/material";
-import PropertyChangeCommand from "@/lib/commands/PropertyChangeCommand";
+import { styled } from '@mui/material/styles';
+import VerticalAlignTopIcon from '@mui/icons-material/VerticalAlignTop';
+import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter';
+import VerticalAlignBottomIcon from '@mui/icons-material/VerticalAlignBottom';
+import UppercaseIcon from '@mui/icons-material/ArrowUpward';
+import LowercaseIcon from '@mui/icons-material/ArrowDownward';
+import BlurOnIcon from "@mui/icons-material/BlurOn";
 
+const anchorIcons: Record<string, React.ReactNode> = {
+    top: <VerticalAlignTopIcon />,
+    middle: <VerticalAlignCenterIcon />,
+    bottom: <VerticalAlignBottomIcon />,
+};
 
-declare global {
-    interface Window {
-        WebFont: any;
-    }
-}
-
-
-
-
-// ---------- Styled Components ----------
-const StyledTextField = styled(TextField)({
-    '& .MuiOutlinedInput-root': {
-        '& fieldset': { borderColor: '#e2e8f0' },
-        '&:hover fieldset': { borderColor: '#c084fc' },
-        '&.Mui-focused fieldset': { borderColor: '#9333ea' },
-        backgroundColor: 'white',
-        borderRadius: '8px',
-    },
-});
-
-const StyledSelect = styled(Select)({
-    '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
-    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#c084fc' },
-    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#9333ea' },
-    backgroundColor: 'white',
-    borderRadius: '8px',
-});
 
 const StyledIconButton = styled(IconButton)({
     backgroundColor: 'white',
-    color: '#9333ea',
-    boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-    transition: 'transform 0.2s, box-shadow 0.2s',
-    '&:hover': {
-        backgroundColor: 'white',
-        color: '#7e22ce',
-        transform: 'translateY(-2px)',
-        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06)',
-    },
+    color: '#6b7280',
+    '&:hover': { backgroundColor: '#f3f4f6' },
 });
 
-const StyledSlider = styled(Slider)({
-    color: '#9333ea',
-    '& .MuiSlider-thumb': { boxShadow: '0 2px 4px rgba(0,0,0,0.2)' },
-});
+const systemFonts = ["Arial", "Helvetica", "Times New Roman", "Courier New", "Verdana", "Georgia", "Poppins"];
+
+const textEffects = [
+    "None", "Shadow", "Lift", "Hollow", "Splice", "Outline",
+    "Echo", "Glitch", "Neon", "Background"
+];
 
 interface TextPropertiesPanelProps {
     canvas: fabric.Canvas | null;
     manager?: any;
+    selectedObject?: fabric.Textbox | null;
 }
 
-
-// ---------- Constants ----------
-const systemFonts = ["Arial", "Poppins", "Times New Roman", "Courier New", "Verdana"];
-const fontWeights = ["normal", "bold"];
-const fontStyles = ["normal", "italic"];
-const textDecorations = ["none", "underline", "line-through"];
-const textAligns = ["left", "center", "right"];
-const textEffects = ["None", "Shadow", "Lift", "Hollow", "Splice", "Outline", "Echo", "Glitch", "Neon", "Background"];
-
-
-// ---------- Main Component ----------
-const TextPropertiesPanel: React.FC<TextPropertiesPanelProps> = ({ canvas, manager }) => {
-    const [selectedText, setSelectedText] = useState<fabric.Textbox | null>(null);
+const TextPropertiesPanel: React.FC<TextPropertiesPanelProps> = ({
+    canvas,
+    manager,
+    selectedObject
+}) => {
+    const [opacity, setOpacity] = useState(100);
+    const [anchorOpacity, setAnchorOpacity] = useState<null | HTMLElement>(null);
     const [availableFonts, setAvailableFonts] = useState<string[]>(systemFonts);
-    const [propsState, setPropsState] = useState<any>({
+    const [showAnimationPanel, setShowAnimationPanel] = useState(false);
+    const [textSpacing, setTextSpacing] = useState({
+        letterSpacing: 0,
+        lineHeight: 1.2,
+    });
+    const [textAnchor, setTextAnchor] = useState<'top' | 'middle' | 'bottom'>('top');
+    const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+    const open = Boolean(anchorEl);
+    const [textProps, setTextProps] = useState({
         text: "",
         fontFamily: "Arial",
         fontSize: 24,
         fontWeight: "normal",
         fontStyle: "normal",
-        textDecoration: "none",
-        fill: "#7c3aed",
-        stroke: "#7c3aed",
+        underline: false,
+        fill: "#000000",
+        stroke: "#000000",
         strokeWidth: 0,
         textAlign: "left",
-        charSpacing: 0,
-        lineHeight: 1.2,
-        opacity: 1,
+        effect: "None",
     });
+
     const [shadowProps, setShadowProps] = useState({
         blur: 0,
         offsetX: 0,
@@ -97,36 +88,7 @@ const TextPropertiesPanel: React.FC<TextPropertiesPanelProps> = ({ canvas, manag
         color: '#000000',
     });
 
-    const [effect, setEffect] = useState("None");
-
-
-        // ---------- Tabs ----------
-    const [activeTab, setActiveTab] = useState(0);
-    const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-        setActiveTab(newValue);
-    };
-
-    // ---------- Color Helpers ----------
-    const formatHexColor = (color: string | fabric.Color | null | undefined): string => {
-        if (!color) return "#000000";
-        let hex = typeof color === 'string' ? color.startsWith("#") ? color.slice(1) : color : color.toHex();
-        const colorNames: { [key: string]: string } = {
-            'black': '#000000', 'white': '#ffffff', 'red': '#ff0000',
-            'blue': '#0000ff', 'green': '#00ff00',
-        };
-        if (colorNames[hex.toLowerCase()]) hex = colorNames[hex.toLowerCase()].slice(1);
-        if (hex.length === 3) return `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`;
-        if (hex.length === 6) return `#${hex}`;
-        return "#000000";
-    };
-
-    const getColorString = (color: any): string => {
-        if (!color) return "#000000";
-        if (typeof color === "string" || color instanceof fabric.Color) return formatHexColor(color);
-        return "#000000"; 
-    };
-
-    // ---------- Fetch Google Fonts ----------
+    // Fetch Google Fonts
     const fetchGoogleFonts = async () => {
         if (availableFonts.length > systemFonts.length) return;
         const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_FONTS_API_KEY;
@@ -135,150 +97,239 @@ const TextPropertiesPanel: React.FC<TextPropertiesPanelProps> = ({ canvas, manag
             const data = await res.json();
             const googleFonts = data.items.map((f: any) => f.family);
             setAvailableFonts(prev => Array.from(new Set([...prev, ...googleFonts])));
-        } catch (err) { console.error("Failed to load Google Fonts", err); }
+        } catch (err) {
+            console.error("Failed to load Google Fonts", err);
+        }
     };
 
-    // ---------- Update selection ----------
+    // for transparency
+
+    // Apply opacity to text
+    const applyOpacity = (value: number) => {
+        if (!canvas) return;
+        const active = canvas.getActiveObject();
+        if (!active || (active.type !== "textbox" && active.type !== "text")) return;
+
+        (active as any).set({ opacity: value / 100 });
+        canvas.requestRenderAll();
+    };
+
+
+    const handleChangeTextColor = (color: string) => {
+        if (!selectedObject || selectedObject.type !== "i-text" || !canvas) return;
+        const iText = selectedObject as fabric.IText;
+
+        // Agar selection hai, to sirf selected part ka color change karo
+        const start = iText.selectionStart ?? 0;
+        const end = iText.selectionEnd ?? 0;
+
+        if (start !== end) {
+            iText.setSelectionStyles({ fill: color }, start, end);
+        } else {
+            // Agar selection nahi, to pure text ka color change
+            iText.set({ fill: color });
+        }
+
+        canvas.requestRenderAll();
+        setTextProps((prev) => ({ ...prev, fill: color }));
+    };
+
+
+
     useEffect(() => {
         if (!canvas) return;
+
         const updateSelection = () => {
             const active = canvas.getActiveObject();
-            if (active && active.type === "textbox") {
-                const txt = active as fabric.Textbox;
-                setSelectedText(txt);
-                
-                setPropsState({
+            if (active && (active.type === "textbox" || active.type === "text")) {
+                const txt = active as any;
+                setTextProps({
                     text: txt.text || "",
                     fontFamily: txt.fontFamily || "Arial",
                     fontSize: txt.fontSize || 24,
-                    fontWeight: txt.fontWeight as any || "normal",
-                    fontStyle: txt.fontStyle as any || "normal",
-                    textDecoration: (txt as any).textDecoration || "none",
-                    fill: getColorString(txt.fill),
-                    stroke: getColorString(txt.stroke),
+                    fontWeight: txt.fontWeight || "normal",
+                    fontStyle: txt.fontStyle || "normal",
+                    underline: txt.underline || false,
+                    fill: typeof txt.fill === "string" ? txt.fill : "#000000",
+                    stroke: typeof txt.stroke === "string" ? txt.stroke : "#000000",
                     strokeWidth: txt.strokeWidth || 0,
                     textAlign: txt.textAlign || "left",
-                    charSpacing: (txt as any).charSpacing || 0,
-                    lineHeight: txt.lineHeight || 1.2,
-                    opacity: txt.opacity || 1,
-                });
-                const shadow = txt.shadow as fabric.Shadow;
-                setShadowProps({
-                    blur: shadow ? shadow.blur || 0 : 0,
-                    offsetX: shadow ? shadow.offsetX || 0 : 0,
-                    offsetY: shadow ? shadow.offsetY || 0 : 0,
-                    color: shadow ? shadow.color || '#000000' : '#000000',
+                    effect: txt.textEffect || "None",
                 });
 
-            } else setSelectedText(null);
+                const shadow = txt.shadow as fabric.Shadow;
+                setShadowProps({
+                    blur: shadow?.blur || 0,
+                    offsetX: shadow?.offsetX || 0,
+                    offsetY: shadow?.offsetY || 0,
+                    color: shadow?.color || '#000000',
+                });
+            }
         };
+
+
+
+
         canvas.on("selection:created", updateSelection);
         canvas.on("selection:updated", updateSelection);
-        canvas.on("selection:cleared", () => setSelectedText(null));
+        canvas.on("selection:cleared", updateSelection);
+
         return () => {
             canvas.off("selection:created", updateSelection);
             canvas.off("selection:updated", updateSelection);
-            canvas.off("selection:cleared", () => setSelectedText(null));
+            canvas.off("selection:cleared", updateSelection);
         };
     }, [canvas]);
 
-    // ---------- Change handler ----------
-const handleChange = (prop: string, value: any) => {
-  if (!canvas || !selectedText || !manager) return;
 
-  const active = selectedText as any;
+    useEffect(() => {
+        if (!canvas) return;
 
-  // Skip undo/redo while typing
-  if (active.type === "textbox" && active.isEditing && prop === "text") return;
+        const active = canvas.getActiveObject();
+        if (active && (active.type === "textbox" || active.type === "text")) {
+            const txt = active as any;
+            setTextSpacing({
+                letterSpacing: (txt.charSpacing || 0) / 10,
+                lineHeight: txt.lineHeight || 1.2,
+            });
+            setTextAnchor(
+                txt.originY === "center" ? "middle" :
+                    txt.originY === "bottom" ? "bottom" : "top"
+            );
+        }
+    }, [canvas, selectedObject]);
 
-  const oldValue = active[prop];
 
-  if (prop === "fontFamily") {
-    import("webfontloader").then(({ default: WebFont }) => {
-      WebFont.load({
-        google: { families: [value] },
-        active: () => {
-manager.execute(PropertyChangeCommand(canvas, active, prop, oldValue, value));
-          setPropsState((prev: any) => ({ ...prev, [prop]: value }));
-        },
-      });
-    });
-  } else {
-manager.execute(PropertyChangeCommand(canvas, active, prop, oldValue, value));
-    setPropsState((prev: any) => ({ ...prev, [prop]: value }));
-  }
-};
+    const handleChange = (prop: string, value: any) => {
+        if (!canvas || !manager) return;
 
-    // ---------- Color Handlers ----------
-    const handleFillChange = (color: string) => handleChange("fill", color);
-    const handleStrokeChange = (color: string) => handleChange("stroke", color);
+        const active = canvas.getActiveObject();
+        if (!active || (active.type !== "textbox" && active.type !== "text")) return;
+
+        const oldValue = (active as any)[prop];
+
+        if (prop === "fontFamily") {
+            import("webfontloader").then(({ default: WebFont }) => {
+                WebFont.load({
+                    google: { families: [value] },
+                    active: () => {
+                        (active as any).set({ [prop]: value });
+                        canvas.requestRenderAll();
+                        setTextProps(prev => ({ ...prev, [prop]: value }));
+                    },
+                });
+            });
+        } else {
+            (active as any).set({ [prop]: value });
+            canvas.requestRenderAll();
+            setTextProps(prev => ({ ...prev, [prop]: value }));
+        }
+
+        if (manager?.execute) {
+            manager.execute({
+                do: () => {
+                    (active as any).set({ [prop]: value });
+                    canvas.requestRenderAll();
+                },
+                undo: () => {
+                    (active as any).set({ [prop]: oldValue });
+                    canvas.requestRenderAll();
+                },
+            });
+        }
+    };
+
+
+
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (!canvas) return;
+            const active = canvas.getActiveObject();
+            if (!active) return;
+
+            // Ctrl + B => Bold toggle
+            if (e.ctrlKey && e.key === 'b') {
+                e.preventDefault();
+                handleChange("fontWeight", textProps.fontWeight === "bold" ? "normal" : "bold");
+            }
+            if (e.ctrlKey && e.key === 'u') {
+                e.preventDefault();
+                handleChange("fontWeight", textProps.fontWeight === "underline" ? "normal" : "underline");
+            }
+
+            // Ctrl + I => Italic toggle
+            if (e.ctrlKey && e.key === 'i') {
+                e.preventDefault();
+                handleChange("fontStyle", textProps.fontStyle === "italic" ? "normal" : "italic");
+            }
+
+            // Delete key => Delete object
+            if (e.key === 'Delete') {
+                canvas.remove(active);
+                canvas.discardActiveObject();
+                canvas.requestRenderAll();
+            }
+
+            // Ctrl + C => Copy
+            if (e.ctrlKey && e.key === 'c') {
+                e.preventDefault();
+                (manager as any)?.executeCopy?.(active);
+            }
+
+            // Ctrl + V => Paste
+            if (e.ctrlKey && e.key === 'v') {
+                e.preventDefault();
+                (manager as any)?.executePaste?.();
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [canvas, textProps, manager]);
+
+
 
 
     const handleShadowChange = (prop: keyof typeof shadowProps, value: number | string) => {
         setShadowProps(prev => ({ ...prev, [prop]: value }));
-        if (selectedText && canvas) {
-            const currentShadow = selectedText.shadow as fabric.Shadow;
-            const newShadow = new fabric.Shadow({
-                color: prop === 'color' ? value as string : currentShadow?.color || '#000000',
-                blur: prop === 'blur' ? value as number : currentShadow?.blur || 0,
-                offsetX: prop === 'offsetX' ? value as number : currentShadow?.offsetX || 0,
-                offsetY: prop === 'offsetY' ? value as number : currentShadow?.offsetY || 0,
-            });
-            selectedText.set({ shadow: newShadow });
-            canvas.requestRenderAll();
-        }
-    };
 
-    const resetShadowProp = (prop: keyof typeof shadowProps) => {
-        if (prop === 'color') {
-            handleShadowChange(prop, '#000000');
-        } else {
-            handleShadowChange(prop, 0);
-        }
-    };
-
-    const cleanupEffectClones = () => {
-        if (!canvas) return;
-        canvas.getObjects().forEach(obj => {
-            if (obj.get('isEffectClone')) {
-                canvas.remove(obj);
+        if (canvas) {
+            const active = canvas.getActiveObject();
+            if (active && (active.type === "textbox" || active.type === "text")) {
+                const currentShadow = (active as any).shadow as fabric.Shadow;
+                const newShadow = new fabric.Shadow({
+                    color: prop === 'color' ? value as string : currentShadow?.color || '#000000',
+                    blur: prop === 'blur' ? value as number : currentShadow?.blur || 0,
+                    offsetX: prop === 'offsetX' ? value as number : currentShadow?.offsetX || 0,
+                    offsetY: prop === 'offsetY' ? value as number : currentShadow?.offsetY || 0,
+                });
+                (active as any).set({ shadow: newShadow });
+                canvas.requestRenderAll();
             }
-        });
+        }
     };
-
-    if (!selectedText) return <div className="p-4 text-purple-700"></div>
 
     const applyEffect = (effect: string) => {
-        if (!selectedText || !canvas) return;
+        if (!canvas) return;
+
+        const active = canvas.getActiveObject();
+        if (!active || (active.type !== "textbox" && active.type !== "text")) return;
 
         // Reset
-        selectedText.set({
+        (active as any).set({
             shadow: null,
-            stroke: propsState.stroke,
-            strokeWidth: propsState.strokeWidth || 0,
-            fill: propsState.fill,
-            fontWeight: propsState.fontWeight,
-            backgroundColor: ''
+            stroke: textProps.stroke,
+            strokeWidth: textProps.strokeWidth || 0,
+            fill: textProps.fill,
+            backgroundColor: '',
+            textEffect: effect,
         });
 
         switch (effect) {
-            case "None":
-                setShadowProps({ blur: 0, offsetX: 0, offsetY: 0, color: '#000000' });
-                break;
-
             case "Shadow":
-                selectedText.set({
-                    shadow: new fabric.Shadow({
-                        color: shadowProps.color,
-                        blur: shadowProps.blur,
-                        offsetX: shadowProps.offsetX,
-                        offsetY: shadowProps.offsetY
-                    })
-                });
-                break;
-
             case "Lift":
-                selectedText.set({
+                (active as any).set({
                     shadow: new fabric.Shadow({
                         color: shadowProps.color,
                         blur: shadowProps.blur,
@@ -289,304 +340,698 @@ manager.execute(PropertyChangeCommand(canvas, active, prop, oldValue, value));
                 break;
 
             case "Hollow":
-                selectedText.set({
+                (active as any).set({
                     fill: 'transparent',
-                    stroke: propsState.fill,
+                    stroke: textProps.fill,
                     strokeWidth: 2
                 });
                 break;
 
             case "Outline":
-                selectedText.set({
-                    stroke: propsState.fill,
+                (active as any).set({
+                    stroke: textProps.fill,
                     strokeWidth: 3
                 });
                 break;
 
-            case "Splice":
-                selectedText.set({
-                    stroke: 'rgba(0,0,0,0.4)',
-                    strokeWidth: 2
-                });
-                break;
-
-            case "Echo":
-                selectedText.set({
-                    shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.2)', blur: 10, offsetX: 5, offsetY: 5 })
-                });
-                break;
-
-            case "Glitch":
-                // @ts-ignore
-                selectedText.clone((clone1: fabric.Textbox) => {
-                    clone1.set({ left: selectedText.left! + 2, fill: 'cyan', selectable: false, opacity: 0.5, isEffectClone: true });
-                    canvas.add(clone1);
-                    canvas.sendToBack(clone1); // <-- Use this instead of clone1.sendToBack()
-
-                    // @ts-ignore
-                    selectedText.clone((clone2: fabric.Textbox) => {
-                        clone2.set({ left: selectedText.left! - 2, fill: 'magenta', selectable: false, opacity: 0.5, isEffectClone: true });
-                        canvas.add(clone2);
-                        canvas.sendToBack(clone2); // <-- Use this instead of clone2.sendToBack()
-                        canvas.requestRenderAll();
-                    });
-                });
-                break;
-
             case "Neon":
-                selectedText.set({
-                    shadow: new fabric.Shadow({ color: propsState.fill, blur: 15, offsetX: 0, offsetY: 0 })
+                (active as any).set({
+                    shadow: new fabric.Shadow({
+                        color: textProps.fill,
+                        blur: 15,
+                        offsetX: 0,
+                        offsetY: 0
+                    })
                 });
                 break;
 
             case "Background":
-                selectedText.set({
-                    backgroundColor: propsState.fill
+                (active as any).set({
+                    backgroundColor: textProps.fill
                 });
                 break;
         }
 
-        selectedText.setCoords();
+        (active as any).setCoords();
         canvas.requestRenderAll();
+        setTextProps(prev => ({ ...prev, effect }));
     };
-    if (!selectedText) return (
-        <div className="p-4 text-center text-purple-700 font-medium">
-          
-        </div>
-    );
 
     return (
-        <div className="w-[320px] p-4 bg-zinc-50 border-l-2 border-zinc-200 flex flex-col gap-4 overflow-y-auto font-sans shadow-inner-xl text-zinc-700">
-            <h3 className="text-xl font-bold text-purple-700 mb-2">Text Properties</h3>
+        <>
+            <div
+                style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    padding: "6px 10px",
+                    backgroundColor: "#fff",
+                    borderRadius: "8px",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                    flexWrap: "nowrap",
+                    overflow: "hidden",
+                    whiteSpace: "nowrap",
+                    height: "60px",
+                }}
+            >
+                {/* Text Input */}
+                <TextField
+                    size="small"
+                    value={textProps.text}
+                    onChange={(e) => handleChange("text", e.target.value)}
+                    placeholder="Text"
+                    sx={{ width: 150 }}
+                />
 
-            {/* ---------- Tabs ---------- */}
-            <Box sx={{ width: '100%' }}>
-                <Tabs value={activeTab} onChange={handleTabChange} variant="fullWidth">
-                    <Tab label="General" />
-                    <Tab label="Effects" />
-                </Tabs>
+                {/* Font Family with Google Fonts */}
+                <Autocomplete
+                    options={availableFonts}
+                    value={textProps.fontFamily}
+                    onOpen={fetchGoogleFonts}
+                    onChange={(e, newValue) => {
+                        if (newValue) handleChange("fontFamily", newValue);
+                    }}
+                    renderInput={(params) => (
+                        <TextField {...params} size="small" sx={{ width: 150 }} />
+                    )}
+                    renderOption={(props, option) => (
+                        <li {...props} key={option} style={{ fontFamily: option }}>
+                            {option}
+                        </li>
+                    )}
+                />
 
-                {/* ---------- General Tab ---------- */}
-                {activeTab === 0 && (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-                        {/* Text */}
-                        <StyledTextField
-                            label="Text"
-                            value={propsState.text}
-                            onChange={(e) => handleChange("text", e.target.value)}
-                            fullWidth size="small"
-                        />
-                        {/* Font Family */}
-                        <Autocomplete
-                            options={availableFonts}
-                            value={propsState.fontFamily}
-                            onOpen={fetchGoogleFonts}
-                            onChange={(e, newValue) => { if (!newValue) return; handleChange("fontFamily", newValue); }}
-                            renderInput={(params) => (
-                                <TextField {...params} label="Font Family" size="small" style={{ backgroundColor: "#ede9fe", borderRadius: 4 }} />
-                            )}
-                            renderOption={(props, option) => (<li {...props} key={option} style={{ fontFamily: option }}>{option}</li>)}
-                        />
-                        {/* Font Size */}
-                        <StyledTextField
-                            type="number"
-                            label="Font Size"
-                            value={propsState.fontSize}
-                            onChange={(e) => handleChange("fontSize", Number(e.target.value))}
-                            inputProps={{ min: 8, max: 200 }}
-                            fullWidth size="small"
-                        />
-                        {/* Font Weight */}
-                        <FormControl fullWidth size="small">
-                            <InputLabel>Font Weight</InputLabel>
-                            <StyledSelect
-                                value={propsState.fontWeight}
-                                onChange={(e) => handleChange("fontWeight", e.target.value)}
-                                label="Font Weight"
-                            >
-                                {fontWeights.map(w => <MenuItem key={w} value={w}>{w}</MenuItem>)}
-                            </StyledSelect>
-                        </FormControl>
-                        {/* Font Style */}
-                        <StyledTextField
-                            select label="Font Style"
-                            value={propsState.fontStyle}
-                            onChange={(e) => handleChange("fontStyle", e.target.value)}
-                            fullWidth size="small"
-                        >
-                            {fontStyles.map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
-                        </StyledTextField>
-                        {/* Text Decoration */}
-                        <FormControl fullWidth size="small">
-                            <InputLabel>Text Decoration</InputLabel>
-                            <StyledSelect
-                                value={propsState.textDecoration}
-                                onChange={e => handleChange("textDecoration", e.target.value)}
-                                label="Text Decoration"
-                            >
-                                {textDecorations.map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
-                            </StyledSelect>
-                        </FormControl>
-                        {/* Colors + Stroke */}
-                        <div className="flex items-center gap-4 mt-2">
-                            <Tooltip title="Fill Color">
-                                <label className="relative">
-                                    <StyledIconButton><FormatColorFillIcon /></StyledIconButton>
-                                    <input
-                                        type="color"
-                                        className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer"
-                                        value={propsState.fill}
-                                        onChange={(e) => handleFillChange(e.target.value)}
-                                    />
-                                </label>
-                            </Tooltip>
-                            <Tooltip title="Stroke Color">
-                                <label className="relative">
-                                    <StyledIconButton><BorderColorIcon /></StyledIconButton>
-                                    <input
-                                        type="color"
-                                        className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer"
-                                        value={propsState.stroke}
-                                        onChange={(e) => handleStrokeChange(e.target.value)}
-                                    />
-                                </label>
-                            </Tooltip>
-                            <StyledTextField
-                                type="number"
-                                label="Stroke"
-                                size="small"
-                                value={propsState.strokeWidth}
-                                onChange={e => handleChange("strokeWidth", Number(e.target.value))}
-                                className="w-20"
-                            />
-                        </div>
-                        {/* Text Align */}
-                        <FormControl fullWidth size="small">
-                            <InputLabel>Text Align</InputLabel>
-                            <StyledSelect
-                                value={propsState.textAlign}
-                                onChange={(e) => handleChange("textAlign", e.target.value)}
-                                label="Text Align"
-                            >
-                                {textAligns.map(a => <MenuItem key={a} value={a}>{a}</MenuItem>)}
-                            </StyledSelect>
-                        </FormControl>
-                        {/* Letter Spacing */}
-                        <StyledTextField
-                            type="number"
-                            label="Letter Spacing"
-                            value={propsState.charSpacing}
-                            onChange={(e) => handleChange("charSpacing", Number(e.target.value))}
-                            fullWidth size="small"
-                        />
-                        {/* Line Height */}
-                        <StyledTextField
-                            type="number"
-                            label="Line Height"
-                            value={propsState.lineHeight}
-                            onChange={(e) => handleChange("lineHeight", Number(e.target.value))}
-                            fullWidth size="small"
-                        />
-                        {/* Opacity */}
-                        <div className="flex flex-col mt-2">
-                            <label className="text-sm text-zinc-500 mb-1">Opacity</label>
-                            <StyledSlider
-                                value={propsState.opacity}
-                                min={0} max={1} step={0.01}
-                                onChange={(e, value) => handleChange("opacity", value)}
-                            />
-                        </div>
-                    </Box>
-                )}
+                {/* Font Size */}
+                <TextField
+                    type="number"
+                    size="small"
+                    value={textProps.fontSize}
+                    onChange={(e) => handleChange("fontSize", Number(e.target.value))}
+                    inputProps={{ min: 8, max: 200 }}
+                    sx={{ width: 70 }}
+                />
 
-                {/* ---------- Effects/Shadow Tab ---------- */}
-                {activeTab === 1 && (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-                        <FormControl fullWidth size="small">
-                            <InputLabel>Text Effect</InputLabel>
-                            <StyledSelect
-                                value={effect}
-                                onChange={(e) => {
-                                    const val = e.target.value as string;
-                                    setEffect(val);
-                                    applyEffect(val);
-                                }}
-                                label="Text Effect"
-                            >
-                                {textEffects.map(te => <MenuItem key={te} value={te}>{te}</MenuItem>)}
-                            </StyledSelect>
-                        </FormControl>
-
-                        {(effect === "Shadow" || effect === "Lift" || effect === "Neon") && (
-                            <FormControl fullWidth size="small" className="rounded-xl bg-zinc-100 mt-4 p-4">
-                                <h4 className="text-md font-semibold text-purple-700 mb-2">Shadow Properties</h4>
-                                {/* Shadow Color */}
-                                <StyledTextField
-                                    label="Shadow Color"
-                                    size="small"
-                                    value={shadowProps.color}
-                                    onChange={(e) => handleShadowChange("color", e.target.value)}
-                                    InputProps={{
-                                        startAdornment: (
-                                            <InputAdornment position="start">
-                                                <input
-                                                    type="color"
-                                                    className="w-6 h-6 p-0 border-none bg-transparent cursor-pointer"
-                                                    value={shadowProps.color}
-                                                    onChange={(e) => handleShadowChange("color", e.target.value)}
-                                                />
-                                            </InputAdornment>
-                                        ),
-                                    }}
-                                    className="mb-2"
-                                />
-                                <IconButton size="small" onClick={() => resetShadowProp("color")}>
-                                    <ReplayIcon fontSize="inherit" />
-                                </IconButton>
-
-                                {/* Blur */}
-                                <FormControl fullWidth size="small" className="mb-2">
-                                    <InputLabel shrink>Blur</InputLabel>
-                                    <StyledSlider
-                                        value={shadowProps.blur}
-                                        min={0} max={20} step={0.5}
-                                        onChange={(e, value) => handleShadowChange("blur", value as number)}
-                                    />
-                                    <IconButton size="small" onClick={() => resetShadowProp("blur")}>
-                                        <ReplayIcon fontSize="inherit" />
-                                    </IconButton>
-                                </FormControl>
-
-                                {/* Offset X */}
-                                <FormControl fullWidth size="small" className="mb-2">
-                                    <InputLabel shrink>Offset X</InputLabel>
-                                    <StyledSlider
-                                        value={shadowProps.offsetX}
-                                        min={-10} max={10} step={0.1}
-                                        onChange={(e, value) => handleShadowChange("offsetX", value as number)}
-                                    />
-                                    <IconButton size="small" onClick={() => resetShadowProp("offsetX")}>
-                                        <ReplayIcon fontSize="inherit" />
-                                    </IconButton>
-                                </FormControl>
-
-                                {/* Offset Y */}
-                                <FormControl fullWidth size="small">
-                                    <InputLabel shrink>Offset Y</InputLabel>
-                                    <StyledSlider
-                                        value={shadowProps.offsetY}
-                                        min={-10} max={10} step={0.1}
-                                        onChange={(e, value) => handleShadowChange("offsetY", value as number)}
-                                    />
-                                    <IconButton size="small" onClick={() => resetShadowProp("offsetY")}>
-                                        <ReplayIcon fontSize="inherit" />
-                                    </IconButton>
-                                </FormControl>
-                            </FormControl>
+                {/* Bold */}
+                <Tooltip title="Bold">
+                    <StyledIconButton
+                        size="small"
+                        onClick={() => handleChange("fontWeight",
+                            textProps.fontWeight === "bold" ? "normal" : "bold"
                         )}
-                    </Box>
+                        sx={{
+                            backgroundColor: textProps.fontWeight === "bold" ? "#e0e7ff" : "white",
+                            color: textProps.fontWeight === "bold" ? "#4f46e5" : "#6b7280",
+                        }}
+                    >
+                        <FormatBoldIcon />
+                    </StyledIconButton>
+                </Tooltip>
+
+                {/* Italic */}
+                <Tooltip title="Italic">
+                    <StyledIconButton
+                        size="small"
+                        onClick={() => handleChange("fontStyle",
+                            textProps.fontStyle === "italic" ? "normal" : "italic"
+                        )}
+                        sx={{
+                            backgroundColor: textProps.fontStyle === "italic" ? "#e0e7ff" : "white",
+                            color: textProps.fontStyle === "italic" ? "#4f46e5" : "#6b7280",
+                        }}
+                    >
+                        <FormatItalicIcon />
+                    </StyledIconButton>
+                </Tooltip>
+
+                {/* Underline */}
+                <Tooltip title="Underline">
+                    <StyledIconButton
+                        size="small"
+                        onClick={() => handleChange("underline", !textProps.underline)}
+                        sx={{
+                            backgroundColor: textProps.underline ? "#e0e7ff" : "white",
+                            color: textProps.underline ? "#4f46e5" : "#6b7280",
+                        }}
+                    >
+                        <FormatUnderlinedIcon />
+                    </StyledIconButton>
+                </Tooltip>
+
+                {/* Divider */}
+                <div style={{ width: "1px", height: "24px", backgroundColor: "#e5e7eb" }} />
+
+                {/* Uppercase Button */}
+                <Tooltip
+                    title={
+                        <>
+                            Uppercase <br />
+                            <small style={{ fontSize: 10, opacity: 0.7 }}>
+                                Ctrl + Shift + K
+                            </small>
+                        </>
+                    }
+                    arrow
+                >
+                    <IconButton
+                        size="small"
+                        onClick={() => {
+                            const active = canvas?.getActiveObject();
+                            if (active && (active.type === 'textbox' || active.type === 'text')) {
+                                const text = (active as any).text || '';
+                                (active as any).set({ text: text.toUpperCase() });
+                                canvas?.requestRenderAll();
+                            }
+                        }}
+                    >
+                        <UppercaseIcon fontSize="small" />
+                    </IconButton>
+                </Tooltip>
+
+                {/* Lowercase Button */}
+                <Tooltip
+                    title={
+                        <>
+                            Lowercase <br />
+                            <small style={{ fontSize: 10, opacity: 0.7 }}>
+                                Ctrl + Shift + L
+                            </small>
+                        </>
+                    }
+                    arrow
+                >
+                    <IconButton
+                        size="small"
+                        onClick={() => {
+                            const active = canvas?.getActiveObject();
+                            if (active && (active.type === 'textbox' || active.type === 'text')) {
+                                const text = (active as any).text || '';
+                                (active as any).set({ text: text.toLowerCase() });
+                                canvas?.requestRenderAll();
+                            }
+                        }}
+                    >
+                        <LowercaseIcon fontSize="small" />
+                    </IconButton>
+                </Tooltip>
+                {/* Align Buttons */}
+                <Tooltip title="Align Left">
+                    <StyledIconButton
+                        size="small"
+                        onClick={() => handleChange("textAlign", "left")}
+                        sx={{
+                            backgroundColor: textProps.textAlign === "left" ? "#e0e7ff" : "white",
+                        }}
+                    >
+                        <FormatAlignLeftIcon />
+                    </StyledIconButton>
+                </Tooltip>
+
+                <Tooltip title="Align Center">
+                    <StyledIconButton
+                        size="small"
+                        onClick={() => handleChange("textAlign", "center")}
+                        sx={{
+                            backgroundColor: textProps.textAlign === "center" ? "#e0e7ff" : "white",
+                        }}
+                    >
+                        <FormatAlignCenterIcon />
+                    </StyledIconButton>
+                </Tooltip>
+
+                <Tooltip title="Align Right">
+                    <StyledIconButton
+                        size="small"
+                        onClick={() => handleChange("textAlign", "right")}
+                        sx={{
+                            backgroundColor: textProps.textAlign === "right" ? "#e0e7ff" : "white",
+                        }}
+                    >
+                        <FormatAlignRightIcon />
+                    </StyledIconButton>
+                </Tooltip>
+
+                {/* Spacing Button */}
+                <Tooltip title="Spacing">
+                    <StyledIconButton
+                        size="small"
+                        onClick={(e) => setAnchorEl(e.currentTarget)}
+                    >
+                        <SpacingIcon />
+                    </StyledIconButton>
+                </Tooltip>
+
+                <Popover
+                    open={open}
+                    anchorEl={anchorEl}
+                    onClose={() => setAnchorEl(null)}
+                    anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                    transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                    sx={{ mt: 1 }}
+                >
+                    <div style={{ padding: 16, width: 250 }}>
+                        {/* Letter Spacing */}
+                        <InputLabel shrink>Letter Spacing</InputLabel>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Slider
+                                min={0}
+                                max={100}
+                                step={1}
+                                value={textSpacing.letterSpacing}
+                                onChange={(e, val) => {
+                                    const value = val as number;
+                                    setTextSpacing(prev => ({ ...prev, letterSpacing: value }));
+                                    const active = canvas?.getActiveObject();
+                                    if (active && (active.type === 'textbox' || active.type === 'text')) {
+                                        (active as any).set({ charSpacing: value * 10 });
+                                        canvas?.requestRenderAll();
+                                    }
+                                }}
+                                style={{ flex: 1 }}
+                            />
+                            <TextField
+                                size="small"
+                                type="number"
+                                value={textSpacing.letterSpacing}
+                                onChange={(e) => {
+                                    const value = Number(e.target.value);
+                                    setTextSpacing(prev => ({ ...prev, letterSpacing: value }));
+                                    const active = canvas?.getActiveObject();
+                                    if (active && (active.type === 'textbox' || active.type === 'text')) {
+                                        (active as any).set({ charSpacing: value * 10 });
+                                        canvas?.requestRenderAll();
+                                    }
+                                }}
+                                inputProps={{ min: 0, max: 100, step: 1 }}
+                                sx={{ width: 60 }}
+                            />
+                        </div>
+
+                        <InputLabel shrink style={{ marginTop: 16 }}>Line Spacing</InputLabel>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Slider
+                                min={0.5}
+                                max={3}
+                                step={0.1}
+                                value={textSpacing.lineHeight}
+                                onChange={(e, val) => {
+                                    const value = val as number;
+                                    setTextSpacing(prev => ({ ...prev, lineHeight: value }));
+                                    const active = canvas?.getActiveObject();
+                                    if (active && (active.type === 'textbox' || active.type === 'text')) {
+                                        (active as any).set({ lineHeight: value });
+                                        canvas?.requestRenderAll();
+                                    }
+                                }}
+                                style={{ flex: 1 }}
+                            />
+                            <TextField
+                                size="small"
+                                type="number"
+                                value={textSpacing.lineHeight}
+                                onChange={(e) => {
+                                    const value = Number(e.target.value);
+                                    setTextSpacing(prev => ({ ...prev, lineHeight: value }));
+                                    const active = canvas?.getActiveObject();
+                                    if (active && (active.type === 'textbox' || active.type === 'text')) {
+                                        (active as any).set({ lineHeight: value });
+                                        canvas?.requestRenderAll();
+                                    }
+                                }}
+                                inputProps={{ min: 0.5, max: 3, step: 0.1 }}
+                                sx={{ width: 60 }}
+                            />
+                        </div>
+
+                        {/* Anchor (Top / Middle / Bottom) */}
+                        <Box
+                            sx={{
+                                display: 'flex',
+                                justifyContent: 'center',
+                                gap: 1,
+                                marginTop: 2,
+                                padding: '6px',
+                                backgroundColor: '#f9fafb',
+                                borderRadius: '12px',
+                                border: '1px solid #e5e7eb',
+                                width: 'fit-content',
+                                mx: 'auto', // centers the group inside Popover
+                            }}
+                        >
+                            {['top', 'middle', 'bottom'].map((anchor) => (
+                                <Tooltip key={anchor} title={`Align ${anchor}`}>
+                                    <StyledIconButton
+                                        size="small"
+                                        onClick={() => {
+                                            setTextAnchor(anchor as any);
+                                            const active = canvas?.getActiveObject();
+                                            if (active && (active.type === 'textbox' || active.type === 'text')) {
+                                                (active as any).set({ originY: anchor === 'middle' ? 'center' : anchor });
+                                                canvas?.requestRenderAll();
+                                            }
+                                        }}
+                                        sx={{
+                                            backgroundColor: textAnchor === anchor ? '#e0e7ff' : 'transparent',
+                                            color: textAnchor === anchor ? '#4f46e5' : '#6b7280',
+                                            borderRadius: '6px',
+                                            transition: 'all 0.2s ease',
+                                            '&:hover': {
+                                                backgroundColor: '#e0e7ff',
+                                                color: '#4f46e5',
+                                            },
+                                        }}
+                                    >
+                                        {anchorIcons[anchor]}
+                                    </StyledIconButton>
+                                </Tooltip>
+                            ))}
+                        </Box>
+                    </div>
+                </Popover>
+                {/* 
+{/* Transparency Button */}
+                <Tooltip title="Transparency">
+                    <IconButton size="small" onClick={(e) => setAnchorOpacity(e.currentTarget)}>
+                        <BlurOnIcon />
+                    </IconButton>
+                </Tooltip>
+
+                <Popover
+                    open={Boolean(anchorOpacity)}
+                    anchorEl={anchorOpacity}
+                    onClose={() => setAnchorOpacity(null)}
+                    anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+                    transformOrigin={{ vertical: "top", horizontal: "center" }}
+                >
+                    <div style={{ padding: "24px", width: "250px" }}>
+                        <label style={{ fontSize: 16, marginBottom: 8, display: "block" }}>Transparency</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+                            <Slider
+                                value={opacity}
+                                min={0}
+                                max={100}
+                                step={1}
+                                onChange={(_, val) => {
+                                    const value = val as number;
+                                    setOpacity(value);
+                                    applyOpacity(value);
+                                }}
+                                style={{ flex: 1 }}
+                            />
+                            <TextField
+                                value={opacity}
+                                onChange={(e) => {
+                                    let value = Number(e.target.value);
+                                    if (value > 100) value = 100;
+                                    if (value < 0) value = 0;
+                                    setOpacity(value);
+                                    applyOpacity(value);
+                                }}
+                                inputProps={{ min: 0, max: 100, type: "number", style: { width: 30, fontSize: 12 } }}
+                                size="small"
+                            />
+                        </div>
+                    </div>
+                </Popover>
+                {/* Divider */}
+                <div style={{ width: "1px", height: "24px", backgroundColor: "#e5e7eb" }} />
+
+
+                {/* Fill Color */}
+                <Tooltip title="Text Color">
+                    <label style={{ position: "relative", cursor: "pointer" }}>
+                        <StyledIconButton size="small">
+                            <FormatColorFillIcon />
+                        </StyledIconButton>
+                        <input
+                            type="color"
+                            value={textProps.fill}
+                            onChange={(e) => handleChange("fill", e.target.value)}
+                            style={{
+                                position: "absolute",
+                                top: 0,
+                                left: 0,
+                                width: "100%",
+                                height: "100%",
+                                opacity: 0,
+                                cursor: "pointer",
+                            }}
+                        />
+                    </label>
+                </Tooltip>
+
+                {/* Stroke Color */}
+                <Tooltip title="Stroke Color">
+                    <label style={{ position: "relative", cursor: "pointer" }}>
+                        <StyledIconButton size="small">
+                            <BorderColorIcon />
+                        </StyledIconButton>
+                        <input
+                            type="color"
+                            value={textProps.stroke}
+                            onChange={(e) => handleChange("stroke", e.target.value)}
+                            style={{
+                                position: "absolute",
+                                top: 0,
+                                left: 0,
+                                width: "100%",
+                                height: "100%",
+                                opacity: 0,
+                                cursor: "pointer",
+                            }}
+                        />
+                    </label>
+                </Tooltip>
+
+                {/* Stroke Width */}
+                <TextField
+                    type="number"
+                    size="small"
+                    value={textProps.strokeWidth}
+                    onChange={(e) => handleChange("strokeWidth", Number(e.target.value))}
+                    inputProps={{ min: 0, max: 20 }}
+                    placeholder="Stroke"
+                    sx={{ width: 70 }}
+                />
+
+
+
+                {/* Divider */}
+                <div style={{ width: "1px", height: "24px", backgroundColor: "#e5e7eb" }} />
+
+                {/* Text Effects */}
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                    <Select
+                        value={textProps.effect}
+                        onChange={(e) => applyEffect(e.target.value)}
+                    >
+                        {textEffects.map((effect) => (
+                            <MenuItem key={effect} value={effect}>
+                                {effect}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+
+                {/* Shadow Controls (if effect needs it) */}
+                {(textProps.effect === "Shadow" || textProps.effect === "Lift") && (
+                    <>
+                        <TextField
+                            size="small"
+                            label="Blur"
+                            type="number"
+                            value={shadowProps.blur}
+                            onChange={(e) => handleShadowChange("blur", Number(e.target.value))}
+                            inputProps={{ min: 0, max: 20, step: 0.5 }}
+                            sx={{ width: 70 }}
+                        />
+                        <TextField
+                            size="small"
+                            label="X"
+                            type="number"
+                            value={shadowProps.offsetX}
+                            onChange={(e) => handleShadowChange("offsetX", Number(e.target.value))}
+                            inputProps={{ min: -10, max: 10, step: 0.1 }}
+                            sx={{ width: 60 }}
+                        />
+                        <TextField
+                            size="small"
+                            label="Y"
+                            type="number"
+                            value={shadowProps.offsetY}
+                            onChange={(e) => handleShadowChange("offsetY", Number(e.target.value))}
+                            inputProps={{ min: -10, max: 10, step: 0.1 }}
+                            sx={{ width: 60 }}
+                        />
+                    </>
                 )}
-            </Box>
+
+                {/* Divider */}
+                <div style={{ width: "1px", height: "24px", backgroundColor: "#e5e7eb" }} />
+
+                {/* Animation Button */}
+                <Tooltip title="Animate">
+                    <StyledIconButton
+                        size="small"
+                        onClick={() => setShowAnimationPanel(true)}
+                    >
+                        <AnimationIcon />
+                    </StyledIconButton>
+                </Tooltip>
+            </div>
+
+            {/* Animation Sliding Panel (Left Side like Canva) */}
+            {showAnimationPanel && (
+                <AnimationSlidingPanel
+                    canvas={canvas}
+                    onClose={() => setShowAnimationPanel(false)}
+                />
+            )}
+        </>
+    );
+};
+
+// Animation Sliding Panel Component
+const AnimationSlidingPanel = ({ canvas, onClose }: any) => {
+    const animations = [
+        { id: "none", name: "None", icon: "⊘" },
+        { id: "fadeIn", name: "Fade In", icon: "◐" },
+        { id: "slideLeft", name: "Slide Left", icon: "←" },
+        { id: "slideRight", name: "Slide Right", icon: "→" },
+        { id: "zoomIn", name: "Zoom In", icon: "⊕" },
+        { id: "bounce", name: "Bounce", icon: "⤊" },
+        { id: "rotate", name: "Rotate", icon: "↻" },
+    ];
+
+    const [selectedAnim, setSelectedAnim] = useState("none");
+    const [speed, setSpeed] = useState(1);
+
+    const applyAnimation = (animId: string) => {
+        if (!canvas) return;
+        const active = canvas.getActiveObject();
+        if (!active) return;
+
+        (active as any).animationId = animId;
+        (active as any).animationSpeed = speed;
+        setSelectedAnim(animId);
+    };
+
+    const removeAnimation = () => {
+        if (!canvas) return;
+        const active = canvas.getActiveObject();
+        if (!active) return;
+
+        (active as any).animationId = "none";
+        setSelectedAnim("none");
+    };
+
+    return (
+        <div style={{
+            position: "fixed",
+            top: 64,
+            left: 0,
+            width: 320,
+            height: "calc(100vh - 64px)",
+            backgroundColor: "#fff",
+            boxShadow: "2px 0 12px rgba(0,0,0,0.15)",
+            zIndex: 1300,
+            padding: "20px",
+            overflowY: "auto",
+            animation: "slideIn 0.3s ease-out",
+        }}>
+            <style>{`
+        @keyframes slideIn {
+          from { transform: translateX(-100%); }
+          to { transform: translateX(0); }
+        }
+      `}</style>
+
+            {/* Header */}
+            <div style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "20px",
+            }}>
+                <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 600 }}>
+                    Animate
+                </h3>
+                <button
+                    onClick={onClose}
+                    style={{
+                        background: "none",
+                        border: "none",
+                        fontSize: "20px",
+                        cursor: "pointer",
+                    }}
+                >
+                    ×
+                </button>
+            </div>
+
+            {/* Speed Control */}
+            <div style={{ marginBottom: "20px" }}>
+                <label style={{ fontSize: "14px", color: "#6b7280", display: "block", marginBottom: "8px" }}>
+                    Speed: {speed}x
+                </label>
+                <input
+                    type="range"
+                    min="0.1"
+                    max="3"
+                    step="0.1"
+                    value={speed}
+                    onChange={(e) => setSpeed(Number(e.target.value))}
+                    style={{ width: "100%" }}
+                />
+            </div>
+
+            {/* Animation Grid */}
+            <div style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "12px",
+                marginBottom: "20px",
+            }}>
+                {animations.map((anim) => (
+                    <button
+                        key={anim.id}
+                        onClick={() => applyAnimation(anim.id)}
+                        style={{
+                            padding: "16px",
+                            border: selectedAnim === anim.id ? "2px solid #7c3aed" : "1px solid #e5e7eb",
+                            borderRadius: "8px",
+                            backgroundColor: selectedAnim === anim.id ? "#f3e8ff" : "#fff",
+                            cursor: "pointer",
+                            textAlign: "center",
+                            fontSize: "14px",
+                        }}
+                    >
+                        <div style={{ fontSize: "24px", marginBottom: "8px" }}>
+                            {anim.icon}
+                        </div>
+                        <div>{anim.name}</div>
+                    </button>
+                ))}
+            </div>
+
+            {/* Remove Animation Button */}
+            {selectedAnim !== "none" && (
+                <button
+                    onClick={removeAnimation}
+                    style={{
+                        width: "100%",
+                        padding: "12px",
+                        backgroundColor: "#ef4444",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        fontWeight: 500,
+                    }}
+                >
+                    Remove Animation
+                </button>
+            )}
         </div>
     );
 };

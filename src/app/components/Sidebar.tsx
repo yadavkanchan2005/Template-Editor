@@ -82,35 +82,14 @@ const Sidebar: React.FC<SidebarProps> = ({
 const handleTemplateData = (templateData: any) => {
   console.log("Template received in Sidebar:", templateData);
   
-  // Check if it's a template object with elements array
   if (templateData && templateData.elements && Array.isArray(templateData.elements)) {
     console.log("Processing template elements:", templateData.elements);
     
-    // Pass the template object (not just elements) to MiniCanva
-onAddShape({ 
-  type: "LOAD_TEMPLATE", 
-  payload: {
-    template: templateData,
-    snapshot: null,
-    prevSize: null,
-    prevBg: null
-  }
-});
-
-  }
-  // If it's already an elements array
-  else if (Array.isArray(templateData)) {
-    console.log("Processing elements array:", templateData);
-    
-    templateData.forEach((element) => {
-      console.log("Adding individual element:", element);
-      onAddShape(element);
+    // Direct call to onAddShape with LOAD_TEMPLATE structure
+    onAddShape({
+      type: "LOAD_TEMPLATE",
+      template: templateData,
     });
-  }
-  // Single element
-  else {
-    console.log("Adding single element:", templateData);
-    onAddShape(templateData);
   }
 };
 

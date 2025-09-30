@@ -13,6 +13,7 @@ interface Props {
   onCanvasReady?: (canvas: fabric.Canvas) => void;
   onObjectSelected?: (object: fabric.Object | null) => void;
   setSelectedObject?: (obj: fabric.Object | null) => void;
+  
 }
 
 
@@ -50,81 +51,163 @@ const MiniCanva: React.FC<Props> = ({ action, onCanvasReady, onObjectSelected, s
   const managerRef = useRef<CommandManager | null>(null);
 
   // --- Generic function to add any element ---
-  // Ye function line 27 ke around hai - isko pura replace kar do
   const addElementToCanvas = async (el: any, canvas: fabric.Canvas): Promise<fabric.Object | null> => {
     let obj: fabric.Object | null = null;
 
-    console.log("Adding element:", el); // Debug ke liye
+    console.log("Adding element:", el.type, el);
 
-    switch (el.type) {
-      case "text":
-        obj = new Textbox(el.text || "Text", {
-          left: el.x || 50,
-          top: el.y || 50,
-          fontSize: el.fontSize || 24,
-          fill: el.fill || "#000",
-        });
-        break;
-
-      case "image":
-        try {
-          // Placeholder image ya real image handle karo
-          const imgSrc = el.placeholder ? "/placeholder.png" : (el.src || "/placeholder.png");
-
-          const img = await fabric.Image.fromURL(imgSrc, { crossOrigin: "anonymous" });
-          img.set({
+    try {
+      switch (el.type) {
+        case "text":
+          obj = new Textbox(el.text || "Text", {
             left: el.x || 50,
             top: el.y || 50,
-            scaleX: el.width ? el.width / img.width! : 1,
-            scaleY: el.height ? el.height / img.height! : 1,
+            fontSize: el.fontSize || 24,
+            fill: el.fill || "#000000",
+            fontFamily: el.fontFamily || "Arial",
           });
-          obj = img;
-        } catch (error) {
-          console.error("Image loading failed:", error);
-          // Fallback rectangle if image fails
+          break;
+
+        case "image":
+          if (!el.src && !el.placeholder) {
+            console.warn("Image element has no src, skipping");
+            break;
+          }
+          // Wait for image to load
+          const imgSrc = el.src || el.placeholder || "/placeholder.png";
+
+          try {
+            const img = await fabric.Image.fromURL(imgSrc, { crossOrigin: "anonymous" });
+
+            if (img && img.width && img.height) {
+              const targetWidth = el.width || 200;
+              const targetHeight = el.height || 200;
+
+              img.set({
+                left: el.x || 50,
+                top: el.y || 50,
+                scaleX: targetWidth / img.width,
+                scaleY: targetHeight / img.height,
+              });
+
+              obj = img;
+              console.log(" Image loaded:", imgSrc);
+            }
+          } catch (imgError) {
+            console.error(" Image load failed:", imgError);
+            // Fallback to colored rectangle
+            obj = new Rect({
+              left: el.x || 50,
+              top: el.y || 50,
+              width: el.width || 200,
+              height: el.height || 200,
+              fill: "#e5e7eb",
+              stroke: "#9ca3af",
+              strokeWidth: 2,
+              strokeDashArray: [10, 5],
+            });
+
+            // Add text label
+            const label = new Textbox("Image\nPlaceholder", {
+              fontSize: 14,
+              fill: "#6b7280",
+              textAlign: "center",
+              width: (el.width || 200) - 20,
+            });
+
+            const group = new Group([obj, label], {
+              left: el.x || 50,
+              top: el.y || 50,
+            });
+
+            obj = group;
+          }
+          break;
+
+case "button":
+  const btnWidth = el.width || 140;
+  const btnHeight = el.height || 50;
+
+  // Create rectangle for button background
+  const btnRect = new Rect({
+    width: btnWidth,
+    height: btnHeight,
+    rx: el.rx || 6,
+    ry: el.ry || 6,
+    fill: el.fill || "#7b68ee",
+    originX: "left",
+    originY: "top",
+    selectable: true,
+    evented: true,
+  });
+
+  // Create text for button label
+  const btnText = new Textbox(el.text || "Button", {
+    fontSize: el.fontSize || 16,
+    fill: el.textColor || "#ffffff",
+    fontFamily: "Arial",
+    textAlign: "center",
+    width: btnWidth - 20,
+    originX: "center",
+    originY: "center",
+    selectable: true,
+    evented: true,
+  });
+  
+  // Position text in center of rectangle
+  btnText.set({
+    left: btnWidth / 2,
+    top: btnHeight / 2,
+  });
+
+  // Create group with interactive children
+  const btnGroup = new Group([btnRect, btnText], {
+    left: el.x || 50,
+    top: el.y || 50,
+    subTargetCheck: true,
+    interactive: true,
+  });
+
+  obj = btnGroup;
+  console.log("✅ Button group created with selectable children");
+  break;
+        case "rect":
+        case "rectangle":
           obj = new Rect({
             left: el.x || 50,
             top: el.y || 50,
-            width: el.width || 200,
-            height: el.height || 200,
-            fill: "#f0f0f0",
-            stroke: "#ddd",
-            strokeDashArray: [5, 5]
+            width: el.width || 100,
+            height: el.height || 100,
+            fill: el.fill || "#3b82f6",
+            stroke: el.stroke || "",
+            strokeWidth: el.strokeWidth || 0,
           });
-        }
-        break;
+          break;
 
-      case "button":
-        const rect = new Rect({
-          width: el.width ?? 140,
-          height: el.height ?? 50,
-          rx: el.rx ?? 6,
-          ry: el.ry ?? 6,
-          fill: el.fill ?? "#7b68ee",
-        });
-        const btnText = new Textbox(el.text || "Button", {
-          fontSize: el.fontSize ?? 16,
-          fill: el.textColor ?? "#fff",
-          originX: "center",
-          originY: "center",
-          left: (el.width ?? 140) / 2,
-          top: (el.height ?? 50) / 2,
-        });
-        obj = new Group([rect, btnText], {
-          left: el.x ?? 50,
-          top: el.y ?? 50,
-        });
-        break;
+        default:
+          console.warn("Unknown element type:", el.type);
+          // Create a placeholder for unknown types
+          obj = new Rect({
+            left: el.x || 50,
+            top: el.y || 50,
+            width: 100,
+            height: 100,
+            fill: "#f3f4f6",
+            stroke: "#d1d5db",
+            strokeWidth: 2,
+          });
+          break;
+      }
 
-      default:
-        console.warn("Unknown element type:", el.type);
-        break;
+      if (obj) {
+        canvas.add(obj);
+        console.log("Element added to canvas:", el.type);
+        return obj;
+      }
+    } catch (error) {
+      console.error("Error adding element:", el.type, error);
     }
 
-    if (obj) {
-      canvas.add(obj);
-      return obj;
-    }
     return null;
   };
   // map to store object state before modification (for modify command)
@@ -380,10 +463,11 @@ const MiniCanva: React.FC<Props> = ({ action, onCanvasReady, onObjectSelected, s
     if (!canvasRef.current) return;
 
     const canvas = new Canvas(canvasRef.current, {
-      width: 900,
+      width: 800,
       height: 600,
       backgroundColor: "#ffffff",
       preserveObjectStacking: true,
+      subTargetCheck: true,
     });
 
 
@@ -391,16 +475,33 @@ const MiniCanva: React.FC<Props> = ({ action, onCanvasReady, onObjectSelected, s
     managerRef.current = new CommandManager(canvas);
     if (onCanvasReady) onCanvasReady(canvas);
 
+    // --- Selection events ---
     canvas.on("selection:created", (e: any) => {
-      const obj = e.selected?.[0] || null;
-      if (onObjectSelected) onObjectSelected(obj);
+      let obj = e.selected?.[0] || null;
+
+      if (obj?.type === "group") {
+        // Check if clicked on child object inside group
+        if ((e.target as fabric.Object)?.type) {
+          obj = e.target as fabric.Object; // select the actual child
+        }
+      }
+
+      setSelectedObject?.(obj);
     });
+
     canvas.on("selection:updated", (e: any) => {
-      const obj = e.selected?.[0] || null;
-      if (onObjectSelected) onObjectSelected(obj);
+      let obj = e.selected?.[0] || null;
+      if (obj?.type === "group") {
+        if ((e.target as fabric.Object)?.type) {
+          obj = e.target as fabric.Object;
+        }
+      }
+
+      setSelectedObject?.(obj);
     });
+
     canvas.on("selection:cleared", () => {
-      if (onObjectSelected) onObjectSelected(null);
+      setSelectedObject?.(null);
     });
 
 
@@ -413,52 +514,38 @@ const MiniCanva: React.FC<Props> = ({ action, onCanvasReady, onObjectSelected, s
         prevStateMap.current.set(target, target.toObject());
       }
     });
+canvas.on("selection:created", (e: any) => {
+  const obj = e.selected?.[0] || null;
+  console.log("Selection created:", obj?.type);
+  if (setSelectedObject) {
+    setSelectedObject(obj);
+  }
+  if (onObjectSelected) {
+    onObjectSelected(obj);
+  }
+});
 
-    // selection events -> baseline state
-    canvas.on("selection:created", () => {
-      canvas.getActiveObjects().forEach((o) => prevStateMap.current.set(o, o.toObject()));
-    });
-    canvas.on("selection:updated", () => {
-      canvas.getActiveObjects().forEach((o) => prevStateMap.current.set(o, o.toObject()));
-    });
+canvas.on("selection:updated", (e: any) => {
+  const obj = e.selected?.[0] || null;
+  console.log("Selection updated:", obj?.type);
+  if (setSelectedObject) {
+    setSelectedObject(obj);
+  }
+  if (onObjectSelected) {
+    onObjectSelected(obj);
+  }
+});
 
-    // when object modified (scale/rotate/move), create a modify command
-    canvas.on("object:modified", (evt: any) => {
-      const target = evt.target as fabric.Object;
-      if (!target || !managerRef.current) return;
-      const prev = prevStateMap.current.get(target) ?? null;
-      const next = target.toObject();
+canvas.on("selection:cleared", () => {
+  console.log("Selection cleared");
+  if (setSelectedObject) {
+    setSelectedObject(null);
+  }
+  if (onObjectSelected) {
+    onObjectSelected(null);
+  }
+});
 
-      // if no prev, store baseline and skip
-      if (!prev) {
-        prevStateMap.current.set(target, next);
-        return;
-      }
-
-      const cmd: Command = {
-        do: () => {
-          try {
-            target.set(next);
-            target.setCoords();
-            canvas.requestRenderAll();
-          } catch (e) {
-            /* ignore */
-          }
-        },
-        undo: () => {
-          try {
-            target.set(prev);
-            target.setCoords();
-            canvas.requestRenderAll();
-          } catch (e) {
-            /* ignore */
-          }
-        },
-      };
-
-      managerRef.current.execute(cmd);
-      prevStateMap.current.delete(target);
-    });
 
     // keyboard shortcuts
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -568,13 +655,10 @@ const MiniCanva: React.FC<Props> = ({ action, onCanvasReady, onObjectSelected, s
     if (!canvas || !manager) return;
     const { type, payload } = action;
     switch (type) {
+
       case "LOAD_TEMPLATE": {
         const { template, snapshot, prevSize, prevBg } = payload;
         const elements = template.elements;
-        const size = template.size;
-
-        console.log("Loading template:", template);
-        console.log("Elements to load:", elements);
 
         const cmd: Command = {
           do: async () => {
@@ -582,30 +666,14 @@ const MiniCanva: React.FC<Props> = ({ action, onCanvasReady, onObjectSelected, s
               // Clear canvas
               canvas.clear();
               canvas.backgroundColor = "#ffffff";
-
-              // Set canvas dimensions
-              if (size) {
-                canvas.setDimensions(size);
-                console.log("Canvas resized to:", size);
-              }
-
               // Load elements sequentially
               const loadedObjects = [];
               for (const el of elements) {
                 const obj = await addElementToCanvas(el, canvas);
-                if (obj) {
-                  loadedObjects.push(obj);
-                }
+                if (obj) loadedObjects.push(obj);
               }
 
-              console.log("Loaded objects:", loadedObjects.length);
-
-              // Final render
               canvas.requestRenderAll();
-
-              // Debug: canvas state after loading
-              console.log("Canvas objects after loading:", canvas.getObjects().length);
-
             } catch (error) {
               console.error("Template loading failed:", error);
             }
@@ -621,13 +689,14 @@ const MiniCanva: React.FC<Props> = ({ action, onCanvasReady, onObjectSelected, s
             } catch (error) {
               console.error("Template undo failed:", error);
             }
-          }
+          },
         };
 
         manager.execute(cmd);
         break;
       }
-      
+
+
       case "ADD_TEMPLATE_ELEMENTS":
         if (action.type === "ADD_TEMPLATE_ELEMENTS" && Array.isArray(action.payload)) {
           canvas.clear();
@@ -659,9 +728,7 @@ const MiniCanva: React.FC<Props> = ({ action, onCanvasReady, onObjectSelected, s
         let obj: fabric.Object | null = null;
 
         // 1) Normal shapes
-        if (typeof payload === "string" &&
-          !payload.startsWith("http") &&
-          !payload.startsWith("/")) {
+          if (typeof payload === "string" && !payload.startsWith("http") && !payload.startsWith("/")) {
           switch (payload) {
             case "rect":
               obj = new fabric.Rect({

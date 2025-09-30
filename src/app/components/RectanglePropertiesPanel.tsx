@@ -249,7 +249,7 @@ const [showAnimationPanel, setShowAnimationPanel] = useState(false);
       case "strokeAlign": obj.set("strokeAlign", value); break;
       case "opacity": obj.set("opacity", value); break;
       case "angle": obj.set("angle", value); break;
-      case "flipX":
+      case "flipX":obj.set(prop, value); break
       case "flipY": obj.set(prop, value); break;
       case "shadowColor":
       case "shadowBlur":
