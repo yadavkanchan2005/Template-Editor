@@ -1,7 +1,19 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Box, Typography, IconButton, Card, CardActionArea, CardMedia, CardContent, Stack } from "@mui/material";
+import {
+  Box,
+  Typography,
+  IconButton,
+  Card,
+  CardActionArea,
+  CardMedia,
+  CardContent,
+  Stack,
+  TextField,
+  Button,
+  Chip,
+} from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 
 interface TemplateElement {
@@ -13,85 +25,54 @@ interface TemplateElement {
   text?: string;
   fontSize?: number;
   placeholder?: boolean;
-       src?: string;  
+  src?: string;
 }
 
 interface Template {
   id: string;
   name: string;
- src: string;
+  src: string;
   size: { width: number; height: number };
+  category: string;
   elements: TemplateElement[];
 }
 
 interface TemplatesPanelProps {
-  onTemplateSelect: (templateData: any) => void;
+  onTemplateSelect: (templateData: Template) => void;
   onClose?: () => void;
 }
 
+// Mock templates with category
 const mockTemplates: Template[] = [
   {
     id: "template_001",
     name: "Instagram Product Ad",
     src: "/images/templates/template1.png",
+    category: "Social",
     size: { width: 1080, height: 1080 },
     elements: [
-      { 
-        type: "image", 
-        x: 100, 
-        y: 100, 
-        width: 400, 
-        height: 400, 
-        src: "/images/templates/template1.png",
-      },
-      { 
-        type: "text", 
-        x: 120, 
-        y: 520, 
-        text: "Product Name", 
-        fontSize: 48 
-      },
-      { 
-        type: "button", 
-        x: 120, 
-        y: 600, 
-        text: "Shop Now" 
-      },
+      { type: "image", x: 100, y: 100, width: 400, height: 400, src: "/images/templates/template1.png" },
+      { type: "text", x: 120, y: 520, text: "Product Name", fontSize: 48 },
+      { type: "button", x: 120, y: 600, text: "Shop Now" },
     ],
   },
   {
     id: "template_002",
     name: "Facebook Banner Ad",
-    src: "/images/templates/template2.png",  
+    src: "/images/templates/template2.png",
+    category: "Social",
     size: { width: 1200, height: 628 },
     elements: [
-      { 
-        type: "image", 
-        x: 50, 
-        y: 50, 
-        width: 500, 
-        height: 400, 
-        src: "/images/templates/template2.png"  
-      },
-      { 
-        type: "text", 
-        x: 600, 
-        y: 100, 
-        text: "Sale", 
-        fontSize: 36 
-      },
-       { 
-        type: "button", 
-        x: 120, 
-        y: 600, 
-        text: "Shop Now" 
-      },
+      { type: "image", x: 50, y: 50, width: 500, height: 400, src: "/images/templates/template2.png" },
+      { type: "text", x: 600, y: 100, text: "Sale", fontSize: 36 },
+      { type: "button", x: 120, y: 600, text: "Shop Now" },
     ],
   },
-   {
+  {
     id: "template_003",
     name: "Jewellery Showcase",
     src: "/images/templates/template3.png",
+    category: "Product",
     size: { width: 1080, height: 1350 },
     elements: [
       { type: "image", x: 150, y: 150, width: 400, height: 400, src: "/images/templates/template3.png" },
@@ -100,99 +81,32 @@ const mockTemplates: Template[] = [
       { type: "button", x: 100, y: 760, text: "Shop Now" },
     ],
   },
-  {
-    id: "template_004",
-    name: "Big Sale Poster",
-    src: "/images/templates/template4.png",
-    size: { width: 1080, height: 1080 },
-    elements: [
-      { type: "text", x: 100, y: 100, text: "Mega Sale", fontSize: 72 },
-      { type: "image", x: 100, y: 300, width: 500, height: 500, src: "/images/templates/template4.png" },
-      { type: "button", x: 100, y: 820, text: "Grab Now" },
-    ],
-  },
-  {
-    id: "template_005",
-    name: "Luxury Watch Ad",
-    src: "/images/templates/template5.png",
-    size: { width: 1080, height: 1080 },
-    elements: [
-      { type: "image", x: 150, y: 150, width: 500, height: 500, src: "/images/templates/template5.png" },
-      { type: "text", x: 120, y: 700, text: "Luxury Watch", fontSize: 48 },
-      { type: "button", x: 120, y: 780, text: "Buy Now" },
-    ],
-  },
-  {
-    id: "template_006",
-    name: "Facebook Event Banner",
-    src: "/images/templates/template6.png",
-    size: { width: 1200, height: 628 },
-    elements: [
-      { type: "text", x: 100, y: 100, text: "Live Event", fontSize: 48 },
-      { type: "image", x: 400, y: 200, width: 600, height: 400, src: "/images/templates/template6.png" },
-      { type: "button", x: 100, y: 550, text: "Join Now" },
-    ],
-  },
-  {
-    id: "template_007",
-    name: "Jewellery Discount Ad",
-    src: "/images/templates/template7.png",
-    size: { width: 1080, height: 1080 },
-    elements: [
-      { type: "text", x: 100, y: 100, text: "20% OFF", fontSize: 72 },
-      { type: "image", x: 150, y: 300, width: 400, height: 400, src: "/images/templates/template7.png" },
-      { type: "button", x: 100, y: 750, text: "Shop Now" },
-    ],
-  },
-  {
-    id: "template_008",
-    name: "Instagram Story Sale",
-    src: "/images/templates/template8.png",
-    size: { width: 1080, height: 1920 },
-    elements: [
-      { type: "image", x: 100, y: 200, width: 500, height: 800, src: "/images/templates/template8.png" },
-      { type: "text", x: 100, y: 1100, text: "Flash Sale", fontSize: 60 },
-      { type: "button", x: 100, y: 1200, text: "Shop Now" },
-    ],
-  },
-  {
-    id: "template_009",
-    name: "Product Launch Poster",
-    src: "/images/templates/template9.png",
-    size: { width: 1080, height: 1080 },
-    elements: [
-      { type: "text", x: 100, y: 100, text: "New Arrival", fontSize: 60 },
-      { type: "image", x: 100, y: 300, width: 500, height: 500, src: "/images/templates/template9.png" },
-      { type: "button", x: 100, y: 820, text: "Buy Now" },
-    ],
-  },
-  {
-    id: "template_010",
-    name: "Jewellery Collection Showcase",
-    src: "/images/templates/template10.png",
-    size: { width: 1080, height: 1350 },
-    elements: [
-      { type: "image", x: 150, y: 150, width: 400, height: 400, src: "/images/templates/template10.png" },
-      { type: "text", x: 120, y: 600, text: "Exclusive Collection", fontSize: 48 },
-      { type: "text", x: 120, y: 680, text: "Limited Edition", fontSize: 24 },
-      { type: "button", x: 120, y: 760, text: "Shop Now" },
-    ],
-  },
+  // Add more templates here with different categories
 ];
-
 
 const TemplatesPanel: React.FC<TemplatesPanelProps> = ({ onTemplateSelect, onClose }) => {
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [activeCategory, setActiveCategory] = useState<string>("All");
+
+  // Categories extracted dynamically from templates
+  const categories = ["All", ...Array.from(new Set(mockTemplates.map((t) => t.category)))];
 
   useEffect(() => {
     setTemplates(mockTemplates);
   }, []);
 
+  const handleSelect = (template: Template) => {
+    onTemplateSelect(template);
+    onClose?.();
+  };
 
-const handleSelect = (template: Template) => {
-  onTemplateSelect(template);
-  onClose?.();
-};
+  // Filter templates by search query and category
+  const filteredTemplates = templates.filter((template) => {
+    const matchesSearch = template.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = activeCategory === "All" || template.category === activeCategory;
+    return matchesSearch && matchesCategory;
+  });
 
   return (
     <Box
@@ -200,50 +114,114 @@ const handleSelect = (template: Template) => {
         position: "fixed",
         top: 64,
         left: 80,
-        width: 400,
+        width: 420,
         height: "calc(100vh - 64px)",
         bgcolor: "#fff",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
-        borderRadius: "0 12px 12px 0",
-        zIndex: 1300,
-        overflowY: "auto",
-        p: 2,
+        boxShadow: "0 12px 40px rgba(0,0,0,0.16)",
+        borderRadius: "0 16px 16px 0",
+        zIndex: 1400,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        fontFamily: "Inter, sans-serif",
       }}
     >
       {/* Header */}
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", p: 2 }}>
+        <Typography variant="h6" sx={{ fontWeight: 700, fontSize: "1.25rem" }}>
           Templates
         </Typography>
         <IconButton onClick={() => onClose?.()}>
-          <CloseIcon />
+          <CloseIcon fontSize="medium" />
         </IconButton>
       </Box>
 
-      {/* Template List */}
-      <Stack spacing={2}>
-        {templates.map((template) => (
-          <Card key={template.id}>
-            <CardActionArea onClick={() => handleSelect(template)}>
-              <CardMedia
-                component="img"
-                height={140}
-                image={template.src}
-                alt={template.name}
-                sx={{ objectFit: "cover" }}
-              />
-              <CardContent>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                  {template.name}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {template.size.width} x {template.size.height}
-                </Typography>
-              </CardContent>
-            </CardActionArea>
-          </Card>
+      {/* Search Bar */}
+      <Box sx={{ px: 2, mb: 1 }}>
+        <TextField
+          fullWidth
+          placeholder="Search templates..."
+          size="small"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          sx={{
+            "& .MuiOutlinedInput-root": {
+              borderRadius: "12px",
+              backgroundColor: "#f9f9f9",
+              "&:hover fieldset": { borderColor: "#d1d5db" },
+            },
+          }}
+        />
+      </Box>
+
+      {/* Categories Toolbar */}
+      <Box
+        sx={{
+          px: 2,
+          mb: 2,
+          display: "flex",
+          gap: 1,
+          overflowX: "auto",
+          pb: 1,
+          "&::-webkit-scrollbar": { display: "none" },
+        }}
+      >
+        {categories.map((cat) => (
+          <Chip
+            key={cat}
+            label={cat}
+            size="small"
+            color={activeCategory === cat ? "primary" : "default"}
+            onClick={() => setActiveCategory(cat)}
+            sx={{
+              cursor: "pointer",
+              fontWeight: activeCategory === cat ? 600 : 500,
+              px: 2,
+              py: 0.5,
+            }}
+          />
         ))}
-      </Stack>
+      </Box>
+
+      {/* Template List */}
+      <Box sx={{ flex: 1, overflowY: "auto", px: 2, pb: 2 }}>
+        <Stack spacing={2}>
+          {filteredTemplates.map((template) => (
+            <Card
+              key={template.id}
+              sx={{
+                borderRadius: "12px",
+                boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+                transition: "transform 0.2s, box-shadow 0.2s",
+                "&:hover": { transform: "scale(1.02)", boxShadow: "0 8px 32px rgba(0,0,0,0.16)" },
+              }}
+            >
+              <CardActionArea onClick={() => handleSelect(template)}>
+                <CardMedia
+                  component="img"
+                  height={200} // bigger height for better view
+                  image={template.src}
+                  alt={template.name}
+                  sx={{ objectFit: "cover", borderTopLeftRadius: "12px", borderTopRightRadius: "12px" }}
+                />
+                <CardContent sx={{ pt: 1 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                    {template.name}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {template.size.width} x {template.size.height}
+                  </Typography>
+                </CardContent>
+              </CardActionArea>
+            </Card>
+          ))}
+          {filteredTemplates.length === 0 && (
+            <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center", mt: 4 }}>
+              No templates found.
+            </Typography>
+          )}
+        </Stack>
+      </Box>
     </Box>
   );
 };

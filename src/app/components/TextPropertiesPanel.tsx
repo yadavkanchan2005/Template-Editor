@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import * as fabric from "fabric";
 import {
-    Select, MenuItem, TextField, Tooltip, IconButton, Box,
+    Select, MenuItem, TextField, Tooltip, IconButton, Box, Typography,
     InputLabel, FormControl, Slider, Autocomplete, InputAdornment
 } from "@mui/material";
 import FormatColorFillIcon from "@mui/icons-material/FormatColorFill";
@@ -24,6 +24,7 @@ import VerticalAlignBottomIcon from '@mui/icons-material/VerticalAlignBottom';
 import UppercaseIcon from '@mui/icons-material/ArrowUpward';
 import LowercaseIcon from '@mui/icons-material/ArrowDownward';
 import BlurOnIcon from "@mui/icons-material/BlurOn";
+import AnimationPanel from "./AnimationSidebar/AnimationPanel";
 
 const anchorIcons: Record<string, React.ReactNode> = {
     top: <VerticalAlignTopIcon />,
@@ -38,6 +39,20 @@ const StyledIconButton = styled(IconButton)({
     '&:hover': { backgroundColor: '#f3f4f6' },
 });
 
+const ActionButton = styled(IconButton)({
+  width: 42,
+  height: 42,
+  marginRight: 10,
+  marginBottom:20,
+  backgroundColor: "#f8fafc",
+  borderRadius: "6px",
+  border: "2px solid #e2e8f0",
+  "&:hover": {
+    backgroundColor: "#f1f5f9",
+    borderColor: "#c084fc",
+  },
+});
+
 const systemFonts = ["Arial", "Helvetica", "Times New Roman", "Courier New", "Verdana", "Georgia", "Poppins"];
 
 const textEffects = [
@@ -49,17 +64,20 @@ interface TextPropertiesPanelProps {
     canvas: fabric.Canvas | null;
     manager?: any;
     selectedObject?: fabric.Textbox | null;
+    
 }
 
 const TextPropertiesPanel: React.FC<TextPropertiesPanelProps> = ({
     canvas,
     manager,
     selectedObject
+    
 }) => {
+    
     const [opacity, setOpacity] = useState(100);
     const [anchorOpacity, setAnchorOpacity] = useState<null | HTMLElement>(null);
     const [availableFonts, setAvailableFonts] = useState<string[]>(systemFonts);
-    const [showAnimationPanel, setShowAnimationPanel] = useState(false);
+const [showAnimationPanel, setShowAnimationPanel] = useState(false);
     const [textSpacing, setTextSpacing] = useState({
         letterSpacing: 0,
         lineHeight: 1.2,
@@ -119,14 +137,13 @@ const TextPropertiesPanel: React.FC<TextPropertiesPanelProps> = ({
         if (!selectedObject || selectedObject.type !== "i-text" || !canvas) return;
         const iText = selectedObject as fabric.IText;
 
-        // Agar selection hai, to sirf selected part ka color change karo
+
         const start = iText.selectionStart ?? 0;
         const end = iText.selectionEnd ?? 0;
 
         if (start !== end) {
             iText.setSelectionStyles({ fill: color }, start, end);
         } else {
-            // Agar selection nahi, to pure text ka color change
             iText.set({ fill: color });
         }
 
@@ -392,6 +409,7 @@ const TextPropertiesPanel: React.FC<TextPropertiesPanelProps> = ({
                     overflow: "hidden",
                     whiteSpace: "nowrap",
                     height: "60px",
+                    
                 }}
             >
                 {/* Text Input */}
@@ -868,171 +886,34 @@ const TextPropertiesPanel: React.FC<TextPropertiesPanelProps> = ({
                 {/* Divider */}
                 <div style={{ width: "1px", height: "24px", backgroundColor: "#e5e7eb" }} />
 
+           
                 {/* Animation Button */}
-                <Tooltip title="Animate">
-                    <StyledIconButton
-                        size="small"
-                        onClick={() => setShowAnimationPanel(true)}
-                    >
-                        <AnimationIcon />
-                    </StyledIconButton>
-                </Tooltip>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Animate</Typography>
+          <Tooltip title="Add Animation">
+            <ActionButton 
+              onClick={() => setShowAnimationPanel(!showAnimationPanel)}
+              sx={{ 
+                backgroundColor: showAnimationPanel ? '#f0f4ff' : '#f8fafc',
+                color: showAnimationPanel ? '#7b68ee' : '#6b7280',
+                borderColor: showAnimationPanel ? '#7b68ee' : '#e2e8f0',
+              }}
+            >
+              <AnimationIcon sx={{ fontSize: 16 }} />
+            </ActionButton>
+          </Tooltip>
+        </Box>
             </div>
-
-            {/* Animation Sliding Panel (Left Side like Canva) */}
-            {showAnimationPanel && (
-                <AnimationSlidingPanel
-                    canvas={canvas}
-                    onClose={() => setShowAnimationPanel(false)}
-                />
-            )}
+    {/* Animation Panel */}
+      {showAnimationPanel && (
+        <AnimationPanel
+          onClose={() => setShowAnimationPanel(false)}
+          canvas={canvas}
+         selectedObject={selectedObject as fabric.FabricObject | null}
+        />
+      )}
         </>
-    );
-};
-
-// Animation Sliding Panel Component
-const AnimationSlidingPanel = ({ canvas, onClose }: any) => {
-    const animations = [
-        { id: "none", name: "None", icon: "⊘" },
-        { id: "fadeIn", name: "Fade In", icon: "◐" },
-        { id: "slideLeft", name: "Slide Left", icon: "←" },
-        { id: "slideRight", name: "Slide Right", icon: "→" },
-        { id: "zoomIn", name: "Zoom In", icon: "⊕" },
-        { id: "bounce", name: "Bounce", icon: "⤊" },
-        { id: "rotate", name: "Rotate", icon: "↻" },
-    ];
-
-    const [selectedAnim, setSelectedAnim] = useState("none");
-    const [speed, setSpeed] = useState(1);
-
-    const applyAnimation = (animId: string) => {
-        if (!canvas) return;
-        const active = canvas.getActiveObject();
-        if (!active) return;
-
-        (active as any).animationId = animId;
-        (active as any).animationSpeed = speed;
-        setSelectedAnim(animId);
-    };
-
-    const removeAnimation = () => {
-        if (!canvas) return;
-        const active = canvas.getActiveObject();
-        if (!active) return;
-
-        (active as any).animationId = "none";
-        setSelectedAnim("none");
-    };
-
-    return (
-        <div style={{
-            position: "fixed",
-            top: 64,
-            left: 0,
-            width: 320,
-            height: "calc(100vh - 64px)",
-            backgroundColor: "#fff",
-            boxShadow: "2px 0 12px rgba(0,0,0,0.15)",
-            zIndex: 1300,
-            padding: "20px",
-            overflowY: "auto",
-            animation: "slideIn 0.3s ease-out",
-        }}>
-            <style>{`
-        @keyframes slideIn {
-          from { transform: translateX(-100%); }
-          to { transform: translateX(0); }
-        }
-      `}</style>
-
-            {/* Header */}
-            <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "20px",
-            }}>
-                <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 600 }}>
-                    Animate
-                </h3>
-                <button
-                    onClick={onClose}
-                    style={{
-                        background: "none",
-                        border: "none",
-                        fontSize: "20px",
-                        cursor: "pointer",
-                    }}
-                >
-                    ×
-                </button>
-            </div>
-
-            {/* Speed Control */}
-            <div style={{ marginBottom: "20px" }}>
-                <label style={{ fontSize: "14px", color: "#6b7280", display: "block", marginBottom: "8px" }}>
-                    Speed: {speed}x
-                </label>
-                <input
-                    type="range"
-                    min="0.1"
-                    max="3"
-                    step="0.1"
-                    value={speed}
-                    onChange={(e) => setSpeed(Number(e.target.value))}
-                    style={{ width: "100%" }}
-                />
-            </div>
-
-            {/* Animation Grid */}
-            <div style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "12px",
-                marginBottom: "20px",
-            }}>
-                {animations.map((anim) => (
-                    <button
-                        key={anim.id}
-                        onClick={() => applyAnimation(anim.id)}
-                        style={{
-                            padding: "16px",
-                            border: selectedAnim === anim.id ? "2px solid #7c3aed" : "1px solid #e5e7eb",
-                            borderRadius: "8px",
-                            backgroundColor: selectedAnim === anim.id ? "#f3e8ff" : "#fff",
-                            cursor: "pointer",
-                            textAlign: "center",
-                            fontSize: "14px",
-                        }}
-                    >
-                        <div style={{ fontSize: "24px", marginBottom: "8px" }}>
-                            {anim.icon}
-                        </div>
-                        <div>{anim.name}</div>
-                    </button>
-                ))}
-            </div>
-
-            {/* Remove Animation Button */}
-            {selectedAnim !== "none" && (
-                <button
-                    onClick={removeAnimation}
-                    style={{
-                        width: "100%",
-                        padding: "12px",
-                        backgroundColor: "#ef4444",
-                        color: "#fff",
-                        border: "none",
-                        borderRadius: "8px",
-                        cursor: "pointer",
-                        fontSize: "14px",
-                        fontWeight: 500,
-                    }}
-                >
-                    Remove Animation
-                </button>
-            )}
-        </div>
+       
     );
 };
 

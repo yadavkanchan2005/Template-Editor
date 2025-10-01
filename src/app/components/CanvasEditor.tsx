@@ -83,54 +83,58 @@ const CanvasEditor: React.FC = () => {
   const [drawMode, setDrawMode] = useState(false);
   const [resizeDialogOpen, setResizeDialogOpen] = useState(false);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
-  const [activePanel, setActivePanel] = useState<string | null>(null); 
+  const [activePanel, setActivePanel] = useState<string | null>(null);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
   
 
   useEffect(() => setMounted(true), []);
-useEffect(() => {
-  console.log("🔄 Selected object changed:", selectedObject?.type || "null");
-  
-  if (!selectedObject) {
-    setPropertyTab("rectangle"); // default
-    return;
-  }
 
-  // Determine which panel to show based on object type
-  let panelType = "rectangle"; // default
-  
-  switch (selectedObject.type) {
-    case "textbox":
-    case "text":
-    case "i-text":
-      panelType = "text";
-      console.log(" Opening Text Panel");
-      break;
-      
-    // All shape types -> Rectangle panel
-    case "rect":
-    case "rectangle":
-    case "circle":
-    case "polygon":
-    case "path":
-    case "triangle":
-    case "image":
-    case "group":
-    default:
-      panelType = "rectangle";
-      console.log("Opening Rectangle Panel");
-      break;
-  }
-  
-  setPropertyTab(panelType);
-}, [selectedObject]);
+  useEffect(() => {
+    console.log("Selected object changed:", selectedObject?.type || "null");
 
-  // Keyboard Shortcuts
+    if (!selectedObject) {
+      setPropertyTab("rectangle");
+      return;
+    }
+
+    let panelType = "rectangle";
+
+    switch (selectedObject.type) {
+      case "textbox":
+      case "text":
+      case "i-text":
+        panelType = "text";
+        console.log("Opening Text Panel");
+        break;
+      case "rect":
+      case "rectangle":
+      case "circle":
+      case "polygon":
+      case "path":
+      case "triangle":
+      case "image":
+      case "group":
+      default:
+        panelType = "rectangle";
+        console.log("Opening Rectangle Panel");
+        break;
+    }
+
+    setPropertyTab(panelType);
+  }, [selectedObject]);
+
   useEffect(() => {
     if (!canvasInstance || !manager) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key.toLowerCase() === "z") { e.preventDefault(); manager.undo(); }
-      if ((e.ctrlKey && e.key.toLowerCase() === "y") || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "z")) { e.preventDefault(); manager.redo(); }
+      if (e.ctrlKey && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        manager.undo();
+      }
+      if ((e.ctrlKey && e.key.toLowerCase() === "y") || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "z")) {
+        e.preventDefault();
+        manager.redo();
+      }
       if (e.ctrlKey && e.key.toLowerCase() === "a") {
         e.preventDefault();
         canvasInstance.discardActiveObject();
@@ -161,11 +165,9 @@ useEffect(() => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [canvasInstance, manager]);
 
-  // Handlers
-  const handleDrawMode = () => {
-    setDrawMode((prev) => !prev);
-    setAction({ type: "TOGGLE_DRAW", payload: !drawMode });
-  };
+ const handleDrawMode = () => {
+  setDrawMode((prev) => !prev);
+};
 
   const handleResize = (width: number, height: number) => {
     setCanvasSize({ width, height });
@@ -174,51 +176,387 @@ useEffect(() => {
   };
 
   const handlers = {
-   onAddText: () => {
+    onAddText: () => {
+      if (!canvasInstance) return;
+      const textbox = new fabric.Textbox("New Text", {
+        left: 100, top: 100, fontSize: 24, fill: "#7c3aed"
+      });
+      canvasInstance.add(textbox);
+      canvasInstance.setActiveObject(textbox);
+      canvasInstance.requestRenderAll();
+      setSelectedObject(textbox);
+      setPropertyTab("text");
+    },
+    onAddShape: (payload: any) => {
+      if (payload && payload.type === "LOAD_TEMPLATE") {
+        const snapshot = canvasInstance?.toJSON();
+        const prevSize = canvasInstance ? { width: canvasInstance.width, height: canvasInstance.height } : null;
+        const prevBg = canvasInstance?.backgroundColor;
+
+        setAction({
+          type: "LOAD_TEMPLATE",
+          payload: {
+            template: payload.template,
+            snapshot,
+            prevSize,
+            prevBg
+          }
+        });
+      } else {
+        setAction({ type: "ADD_SHAPE", payload });
+      }
+    },
+    onDelete: () => setAction({ type: "DELETE" }),
+    onUndo: () => setAction({ type: "UNDO" }),
+    onRedo: () => setAction({ type: "REDO" }),
+    onClear: () => setAction({ type: "CLEAR" }),
+    onBringForward: () => setAction({ type: "BRING_FORWARD" }),
+    onSendBackward: () => setAction({ type: "SEND_BACKWARD" }),
+    onBringToFront: () => setAction({ type: "BRING_TO_FRONT" }),
+    onSendToBack: () => setAction({ type: "SEND_TO_BACK" }),
+    onUpload: (file: File) => setAction({ type: "UPLOAD", payload: file }),
+    onExport: (format: string) => setAction({ type: "EXPORT", payload: format }),
+    setActiveCategory,
+    handleDrawMode,
+  };
+
+  const playAnimation = (obj: fabric.Object, animationId: string, speed: number) => {
     if (!canvasInstance) return;
-    const textbox = new fabric.Textbox("New Text", { 
-      left: 100, top: 100, fontSize: 24, fill: "#7c3aed" 
+
+    const duration = 1000 / speed;
+    const originalLeft = obj.left || 0;
+    const originalTop = obj.top || 0;
+    const originalScaleX = obj.scaleX || 1;
+    const originalScaleY = obj.scaleY || 1;
+    const originalOpacity = obj.opacity || 1;
+    const originalAngle = obj.angle || 0;
+
+ // Clear previous animation interval if exists
+  if ((obj as any)._animationInterval) {
+    clearInterval((obj as any)._animationInterval);
+    (obj as any)._animationInterval = null;
+  }
+
+
+    switch (animationId) {
+      case "fadeIn":
+        obj.set({ opacity: 0 });
+        obj.animate({ opacity: originalOpacity }, {
+          duration,
+          onChange: () => canvasInstance.renderAll()
+        });
+        break;
+
+      case "slideLeft":
+        obj.set({ left: originalLeft + 300 });
+        obj.animate({ left: originalLeft }, {
+          duration,
+          onChange: () => canvasInstance.renderAll(),
+          easing: (t) => t * (2 - t)
+        });
+        break;
+
+      case "slideRight": {
+        const originalLeft = obj.left || 0;
+        obj.set({ left: originalLeft - 200 });
+        canvasInstance.renderAll();
+        obj.animate(
+          { left: originalLeft },
+          {
+            duration,
+            onChange: () => canvasInstance.renderAll(),
+            easing: fabric.util.ease.easeOutCubic,
+          }
+        );
+        break;
+      }
+      case "ascend": {
+        const originalTop = obj.top || 0;
+        const originalOpacity = obj.opacity ?? 1;
+        obj.set({ top: originalTop + 100, opacity: 0 });
+        canvasInstance.renderAll();
+        obj.animate(
+          { top: originalTop, opacity: originalOpacity },
+          {
+            duration,
+            onChange: () => canvasInstance.renderAll(),
+            easing: fabric.util.ease.easeOutCubic,
+          }
+        );
+        break;
+      }
+
+
+      case "shift":
+        obj.set({ left: originalLeft - 100, opacity: 0 });
+        obj.animate({ left: originalLeft, opacity: originalOpacity }, {
+          duration,
+          onChange: () => canvasInstance.renderAll()
+        });
+        break;
+
+      case "zoomIn": {
+        const originalScaleX = obj.scaleX || 1;
+        const originalScaleY = obj.scaleY || 1;
+        const originalOpacity = obj.opacity ?? 1;
+
+        // Reset first
+        obj.set({ scaleX: 0, scaleY: 0, opacity: 0 });
+        canvasInstance.renderAll();
+
+        // Animate to original
+        obj.animate(
+          { scaleX: originalScaleX, scaleY: originalScaleY, opacity: originalOpacity },
+          {
+            duration,
+            easing: fabric.util.ease.easeOutCubic,
+            onChange: () => canvasInstance.renderAll(),
+          }
+        );
+        break;
+      }
+
+
+      case "bounce":
+        obj.set({ top: originalTop - 200, opacity: 0 });
+        obj.animate({ top: originalTop, opacity: originalOpacity }, {
+          duration: duration * 1.5,
+          easing: (t: number) => {
+            const c = 1.70158;
+            return --t * t * ((c + 1) * t + c) + 1;
+          },
+          onChange: () => canvasInstance.renderAll(),
+        });
+        break;
+
+      case "rotate":
+        obj.set({ angle: -360, opacity: 0 });
+        obj.animate(
+          { angle: originalAngle, opacity: originalOpacity },
+          {
+            duration: 3000,
+            onChange: () => canvasInstance.renderAll(),
+            easing: fabric.util.ease.easeOutCubic,
+          }
+        );
+        break;
+
+
+      case "merge":
+        obj.set({ scaleX: 0.1, opacity: 0 });
+        obj.animate({ scaleX: originalScaleX, opacity: originalOpacity }, {
+          duration,
+          onChange: () => canvasInstance.renderAll()
+        });
+        break;
+
+      case "block":
+        obj.set({ scaleY: 0, opacity: 0 });
+        obj.animate({ scaleY: originalScaleY, opacity: originalOpacity }, {
+          duration,
+          onChange: () => canvasInstance.renderAll()
+        });
+        break;
+      case "burst":
+        obj.set({ scaleX: 2, scaleY: 2, opacity: 0 });
+        obj.animate(
+          { scaleX: originalScaleX, scaleY: originalScaleY, opacity: originalOpacity },
+          {
+            duration,
+            onChange: () => canvasInstance.renderAll(),
+            easing: fabric.util.ease.easeOutCubic
+          }
+        );
+        break;
+
+
+      case "roll":
+        obj.set({ left: originalLeft - 300, angle: -360 });
+        obj.animate({ left: originalLeft, angle: originalAngle }, {
+          duration: duration * 1.5,
+          onChange: () => canvasInstance.renderAll()
+        });
+        break;
+
+      case "skate":
+        obj.set({ left: originalLeft - 200, top: originalTop - 80, opacity: 0 });
+        obj.animate({ left: originalLeft, top: originalTop, opacity: originalOpacity }, {
+          duration,
+          onChange: () => canvasInstance.renderAll()
+        });
+        break;
+
+      case "typewriter":
+        if (obj.type === "textbox" || obj.type === "text") {
+          const textObj = obj as fabric.Textbox;
+          const fullText = textObj.text || "";
+          textObj.set({ text: "" });
+          let charIndex = 0;
+          const charDuration = duration / fullText.length;
+          const interval = setInterval(() => {
+            if (charIndex < fullText.length) {
+              textObj.set({ text: fullText.substring(0, charIndex + 1) });
+              canvasInstance.renderAll();
+              charIndex++;
+            } else {
+              clearInterval(interval);
+            }
+          }, charDuration);
+        }
+        break;
+
+    case "flipH":
+      obj.set({ scaleX: 0 });
+      obj.animate({ scaleX: originalScaleX }, { duration, onChange: () => canvasInstance.renderAll() });
+      break;
+
+    case "flipV":
+      obj.set({ scaleY: 0 });
+      obj.animate({ scaleY: originalScaleY }, { duration, onChange: () => canvasInstance.renderAll() });
+      break;
+
+    case "swing":
+      let swingCount = 0;
+      const swingInterval = setInterval(() => {
+        obj.set({ angle: originalAngle + (swingCount % 2 === 0 ? 10 : -10) });
+        canvasInstance.renderAll();
+        swingCount++;
+        if (swingCount > 6) { obj.set({ angle: originalAngle }); clearInterval(swingInterval); }
+      }, 100);
+      break;
+
+    case "pop":
+      obj.set({ scaleX: 0, scaleY: 0, opacity: 0 });
+      obj.animate(
+        { scaleX: originalScaleX, scaleY: originalScaleY, opacity: originalOpacity },
+        { duration, onChange: () => canvasInstance.renderAll() }
+      );
+      break;
+
+    case "shake":
+      let shakeCount = 0;
+      const shakeInterval = setInterval(() => {
+        obj.set({ left: originalLeft + (shakeCount % 2 === 0 ? 10 : -10) });
+        canvasInstance.renderAll();
+        shakeCount++;
+        if (shakeCount > 6) { obj.set({ left: originalLeft }); clearInterval(shakeInterval); }
+      }, 80);
+      break;
+
+    case "wobble":
+      let wobbleCount = 0;
+      const wobbleInterval = setInterval(() => {
+        obj.set({ angle: originalAngle + (wobbleCount % 2 === 0 ? 10 : -10) });
+        canvasInstance.renderAll();
+        wobbleCount++;
+        if (wobbleCount > 6) { obj.set({ angle: originalAngle }); clearInterval(wobbleInterval); }
+      }, 100);
+      break;
+
+    case "pulse":
+      obj.set({ scaleX: 0.8, scaleY: 0.8 });
+      obj.animate({ scaleX: originalScaleX, scaleY: originalScaleY }, { duration, onChange: () => canvasInstance.renderAll() });
+      break;
+
+    case "drop":
+      obj.set({ top: originalTop - 100, opacity: 0 });
+      obj.animate(
+        { top: originalTop, opacity: originalOpacity },
+        { duration, easing: (t) => t * t, onChange: () => canvasInstance.renderAll() }
+      );
+      break;
+
+    case "expandWidth":
+      obj.set({ scaleX: 0, opacity: 0 });
+      obj.animate({ scaleX: originalScaleX, opacity: originalOpacity }, { duration, onChange: () => canvasInstance.renderAll() });
+      break;
+
+    case "colorFlash":
+      const originalFill = (obj as any).fill || "#000";
+      let flashCount = 0;
+      const flashInterval = setInterval(() => {
+        (obj as any).set({ fill: flashCount % 2 === 0 ? "#8b5cf6" : originalFill });
+        canvasInstance.renderAll();
+        flashCount++;
+        if (flashCount > 5) { (obj as any).set({ fill: originalFill }); clearInterval(flashInterval); }
+      }, 150);
+      break;
+
+    case "bounceUp":
+      obj.set({ top: originalTop + 50, opacity: 0 });
+      obj.animate(
+        { top: originalTop, opacity: originalOpacity },
+        { duration, easing: (t) => 1 - Math.pow(1 - t, 3), onChange: () => canvasInstance.renderAll() }
+      );
+      break;
+
+  case "blink":
+      let visible = true;
+      const interval = setInterval(() => {
+        obj.set({ opacity: visible ? 0 : originalOpacity });
+        canvasInstance.renderAll();
+        visible = !visible;
+      }, 300); // change every 300ms
+      (obj as any)._animationInterval = interval; // store interval ID
+      break;
+
+    }
+  };
+
+  const playAllAnimations = () => {
+    if (!canvasInstance) return;
+
+    setIsPreviewMode(true);
+
+    const originalStates = new Map();
+    const objects = canvasInstance.getObjects();
+
+    objects.forEach((obj: any) => {
+      originalStates.set(obj, {
+        left: obj.left,
+        top: obj.top,
+        scaleX: obj.scaleX,
+        scaleY: obj.scaleY,
+        opacity: obj.opacity,
+        angle: obj.angle,
+        visible: obj.visible,
+      });
+
+      if (obj.animationId && obj.animationId !== "none") {
+        obj.set({ visible: false });
+      }
     });
-    canvasInstance.add(textbox);
-    canvasInstance.setActiveObject(textbox);
+
     canvasInstance.requestRenderAll();
-    setSelectedObject(textbox); 
-    setPropertyTab("text");
-  },
-  onAddShape: (payload: any) => {
-    // Check if it's a template load
-    if (payload && payload.type === "LOAD_TEMPLATE") {
-      const snapshot = canvasInstance?.toJSON();
-      const prevSize = canvasInstance ? { width: canvasInstance.width, height: canvasInstance.height } : null;
-      const prevBg = canvasInstance?.backgroundColor;
-      
-      setAction({ 
-        type: "LOAD_TEMPLATE", 
-        payload: {
-          template: payload.template,
-          snapshot,
-          prevSize,
-          prevBg
+
+    let delay = 0;
+
+    objects.forEach((obj: any) => {
+      const animId = obj.animationId;
+      const animSpeed = obj.animationSpeed || 1;
+      const appearOnClick = obj.appearOnClick;
+
+      if (animId && animId !== "none" && !appearOnClick) {
+        setTimeout(() => {
+          obj.set({ visible: true });
+          playAnimation(obj, animId, animSpeed);
+        }, delay);
+
+        delay += 500;
+      }
+    });
+
+    setTimeout(() => {
+      setIsPreviewMode(false);
+      objects.forEach((obj: any) => {
+        const original = originalStates.get(obj);
+        if (original) {
+          obj.set(original);
         }
       });
-    } else {
-      // Normal shape add
-setAction({ type: "ADD_SHAPE", payload });
-    }
-  },
-  onDelete: () => setAction({ type: "DELETE" }),
-  onUndo: () => setAction({ type: "UNDO" }),
-  onRedo: () => setAction({ type: "REDO" }),
-  onClear: () => setAction({ type: "CLEAR" }),
-  onBringForward: () => setAction({ type: "BRING_FORWARD" }),
-  onSendBackward: () => setAction({ type: "SEND_BACKWARD" }),
-  onBringToFront: () => setAction({ type: "BRING_TO_FRONT" }),
-  onSendToBack: () => setAction({ type: "SEND_TO_BACK" }),
-  onUpload: (file: File) => setAction({ type: "UPLOAD", payload: file }),
-  onExport: (format: string) => setAction({ type: "EXPORT", payload: format }),
-  setActiveCategory,
-  handleDrawMode,
-};
+      canvasInstance.requestRenderAll();
+    }, delay + 3000);
+  };
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) handlers.onUpload(e.target.files[0]);
@@ -236,33 +574,31 @@ setAction({ type: "ADD_SHAPE", payload });
     onSendToBack: handlers.onSendToBack,
     onSelectCategory: handlers.setActiveCategory,
     onDrawMode: handlers.handleDrawMode,
-    setActivePanel, 
+  setActivePanel,
+  drawMode: drawMode  
   };
 
+  const handleTemplateSelect = (templateData: any) => {
+    if (!canvasInstance) return;
 
-const handleTemplateSelect = (templateData: any) => {
-  if (!canvasInstance) return;
-  
-  console.log("Template selected:", templateData); 
-  
-  // Current canvas state store karo (for undo)
-  const snapshot = canvasInstance.toJSON();
-  const prevSize = { width: canvasInstance.width, height: canvasInstance.height };
-  const prevBg = canvasInstance.backgroundColor;
-  
-  // MiniCanva ko proper action send karo
-  setAction({
-    type: "LOAD_TEMPLATE",
-    payload: {
-      template: templateData,
-      snapshot: snapshot,
-      prevSize: prevSize,
-      prevBg: prevBg
-    }
-  });
-  
-  setActiveCategory(null);
-}
+    console.log("Template selected:", templateData);
+
+    const snapshot = canvasInstance.toJSON();
+    const prevSize = { width: canvasInstance.width, height: canvasInstance.height };
+    const prevBg = canvasInstance.backgroundColor;
+
+    setAction({
+      type: "LOAD_TEMPLATE",
+      payload: {
+        template: templateData,
+        snapshot: snapshot,
+        prevSize: prevSize,
+        prevBg: prevBg
+      }
+    });
+
+    setActiveCategory(null);
+  };
 
   if (!mounted) return null;
 
@@ -271,7 +607,7 @@ const handleTemplateSelect = (templateData: any) => {
       case "rectangle":
         return <RectanglePropertiesPanel canvas={canvasInstance} selectedObject={selectedObject as fabric.Rect | null} manager={manager} />;
       case "text":
-        return <TextPropertiesPanel canvas={canvasInstance} manager={manager} />;
+        return <TextPropertiesPanel canvas={canvasInstance} manager={manager} selectedObject={selectedObject as fabric.Textbox | null} />;
       default:
         return null;
     }
@@ -285,9 +621,21 @@ const handleTemplateSelect = (templateData: any) => {
           <Box sx={{ display: "flex", alignItems: "center" }}>
             <HeaderButton startIcon={<UndoIcon />} onClick={handlers.onUndo}>Undo</HeaderButton>
             <HeaderButton startIcon={<RedoIcon />} onClick={handlers.onRedo}>Redo</HeaderButton>
-            <HeaderButton startIcon={<AspectRatioIcon />} onClick={() => setResizeDialogOpen(true)}>
-              Resize
+
+            <HeaderButton
+              variant="contained"
+              disabled={isPreviewMode}
+              sx={{
+                backgroundColor: isPreviewMode ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.2)",
+                "&:hover": { backgroundColor: "rgba(255,255,255,0.3)" },
+                "&.Mui-disabled": { color: "rgba(255,255,255,0.5)" }
+              }}
+              onClick={playAllAnimations}
+            >
+              {isPreviewMode ? "Playing..." : "Preview"}
             </HeaderButton>
+
+            <HeaderButton startIcon={<AspectRatioIcon />} onClick={() => setResizeDialogOpen(true)}>Resize</HeaderButton>
             <HeaderButton startIcon={<SaveIcon />} onClick={handleSave}>Save</HeaderButton>
             <Button startIcon={<UploadFileIcon />} component="label">
               Upload
@@ -302,7 +650,6 @@ const handleTemplateSelect = (templateData: any) => {
         </Toolbar>
       </CanvaHeader>
 
-      {/* Resize Dialog */}
       <Dialog open={resizeDialogOpen} onClose={() => setResizeDialogOpen(false)}>
         <DialogTitle>Canvas Size</DialogTitle>
         <DialogContent>
@@ -328,10 +675,8 @@ const handleTemplateSelect = (templateData: any) => {
         </DialogActions>
       </Dialog>
 
-      {/* Property Panel */}
       <PropertiesPanelWrapper>{renderPropertyPanel()}</PropertiesPanelWrapper>
 
-      {/* Main Content */}
       <Box sx={{ display: "flex", flex: 1, pt: "64px", mt: "72px", overflow: "hidden" }}>
         <Sidebar {...sidebarHandlers} />
 
@@ -341,41 +686,29 @@ const handleTemplateSelect = (templateData: any) => {
               action={action}
               onCanvasReady={(canvas: fabric.Canvas) => { setCanvasInstance(canvas); setManager(new CommandManager(canvas)); }}
               onObjectSelected={setSelectedObject}
-               setSelectedObject={setSelectedObject}
+              setSelectedObject={setSelectedObject}
             />
           </CanvasContainer>
 
-          {/* Overlay Panels */}
           {activePanel === "elements" && (
-  <Box sx={{ position: "absolute", top: 0, left: 0, zIndex: 50 }}>
-    <DynamicElementsPanel
-      onAddElement={(actionData: any) => {
-        console.log(" Element action received:", actionData);
-        setAction(actionData);
-        setTimeout(() => {
-          setActivePanel(null);
-        }, 100);
-      }}
-      onClose={() => setActivePanel(null)}
-    />
-  </Box>
-)}
-          
-          {activePanel === "animation" && selectedObject && (
-            <Box
-              sx={{
-                position: "absolute",
-                top: 0,
-                right: 0,
-                zIndex: 50,
-              }}
-            >
-              <AnimationPanel
-                canvas={canvasInstance}
-                selectedObject={selectedObject}
+            <Box sx={{ position: "absolute", top: 0, left: 0, zIndex: 50 }}>
+              <DynamicElementsPanel
+                onAddElement={(actionData: any) => {
+                  console.log("Element action received:", actionData);
+                  setAction(actionData);
+                  setTimeout(() => setActivePanel(null), 100);
+                }}
                 onClose={() => setActivePanel(null)}
               />
             </Box>
+          )}
+
+          {activePanel === "animation" && selectedObject && (
+            <AnimationPanel
+              canvas={canvasInstance}
+              selectedObject={selectedObject}
+              onClose={() => setActivePanel(null)}
+            />
           )}
         </Box>
 

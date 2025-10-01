@@ -169,7 +169,7 @@ case "button":
   });
 
   obj = btnGroup;
-  console.log("✅ Button group created with selectable children");
+  console.log("Button group created with selectable children");
   break;
         case "rect":
         case "rectangle":
@@ -601,20 +601,22 @@ canvas.on("selection:cleared", () => {
 
 
     // Play animations on load
-    const playAllAnimations = () => {
-      const objects = canvas.getObjects();
-      objects.forEach((obj) => {
-        const animId = (obj as any).animationId;
-        const animSpeed = (obj as any).animationSpeed || 1;
-        const appearOnClick = (obj as any).appearOnClick;
+   const playAllAnimations = () => {
+  const objects = canvas.getObjects();
+  objects.forEach((obj) => {
+    const animId = (obj as any).animationId;
+    const animSpeed = (obj as any).animationSpeed || 1;
+    const appearOnClick = (obj as any).appearOnClick;
 
-        if (animId && !appearOnClick) {
-          setTimeout(() => {
-            playObjectAnimation(obj, animId, animSpeed);
-          }, 300);
-        }
-      });
-    };
+    if (animId && animId !== "none" && !appearOnClick) {
+      setTimeout(() => {
+        playObjectAnimation(obj, animId, animSpeed);
+      }, 300);
+    }
+  });
+};
+
+setTimeout(playAllAnimations, 500);
 
     setTimeout(playAllAnimations, 500);
     // When object is added, play its animation

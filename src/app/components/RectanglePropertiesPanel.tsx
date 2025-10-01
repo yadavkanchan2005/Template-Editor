@@ -38,10 +38,10 @@ import CommandManager, { Command } from "@/lib/CommandManager";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import AnimationPanel from "./AnimationSidebar/AnimationPanel";
 
-// Styled components (same as circle panel)
+
 const StyledInput = styled(TextField)({
   width: 60,
-  marginRight: 8,
+  marginRight: 4,
   "& .MuiOutlinedInput-root": {
     height: "32px",
     fontSize: "12px",
@@ -58,7 +58,7 @@ const StyledInput = styled(TextField)({
 });
 
 const StyledSlider = styled(Slider)({
-  width: 80,
+  width: 100,
   color: "#9333ea",
   marginRight: 8,
   "& .MuiSlider-thumb": {
@@ -160,13 +160,17 @@ const RectanglePropertiesPanel: React.FC<RectanglePropertiesPanelProps> = ({
     strokeAlign: "center", radius: 0, sides: 3,
     strokeStyle: "solid",
   });
-
+const [radiusPopoverOpen, setRadiusPopoverOpen] = useState(false);
+const [radiusAnchorEl, setRadiusAnchorEl] = useState<HTMLElement | null>(null);
   const [clipboard, setClipboard] = useState<fabric.Object | null>(null);
   const [fillPickerOpen, setFillPickerOpen] = useState(false);
   const [strokePickerOpen, setStrokePickerOpen] = useState(false);
   const [shadowPickerOpen, setShadowPickerOpen] = useState(false);
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [gradientPanelOpen, setGradientPanelOpen] = useState(false);
 const [showAnimationPanel, setShowAnimationPanel] = useState(false);
+ const [opacity, setOpacity] = useState(100);
+    const [anchorOpacity, setAnchorOpacity] = useState<null | HTMLElement>(null);
 
 
   useEffect(() => {
@@ -307,17 +311,27 @@ const [showAnimationPanel, setShowAnimationPanel] = useState(false);
     setGradientPanelOpen(false);
   };
 
+
+   // Apply opacity to text
+    const applyOpacity = (value: number) => {
+  if (!selectedObject) return;
+
+  if (selectedObject.type === "activeSelection") {
+    const objects = (selectedObject as fabric.ActiveSelection)._objects;
+    objects.forEach((obj) => obj.set("opacity", value / 100));
+  } else {
+    selectedObject.set("opacity", value / 100);
+  }
+
+  (canvas as fabric.Canvas).renderAll();
+
+};
+
+
   if (!selectedObject) return null;
 return (
     <>
-      <Box sx={{ width: '100%', overflowX: 'auto', bgcolor: '#ffffff', padding: 2, display: 'flex', gap: 1.5, alignItems: 'center' }}>
-        {/* Radius */}
-        {(selectedObject.type === 'rect' || selectedObject.type === 'circle' || selectedObject.type === 'triangle') && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Radius</Typography>
-            <StyledInput type="number" value={propsState.radius} onChange={e => handleChange("radius", Number(e.target.value))} />
-          </Box>
-        )}
+      <Box sx={{ width: '100%', overflowX: 'auto', bgcolor: '#ffffff', padding: 1, display: 'flex', gap: 0, alignItems: 'center' }}>
 
         {/* Sides */}
         {(selectedObject.type === 'polygon' || selectedObject.type === 'triangle') && (
@@ -330,22 +344,46 @@ return (
         )}
 
         {/* Position */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        {/* <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Position</Typography>
           <Box sx={{ display: 'flex', gap: 0.5 }}>
             <StyledInput type="number" value={Math.round(propsState.x)} onChange={e => handleChange("x", Number(e.target.value))} />
             <StyledInput type="number" value={Math.round(propsState.y)} onChange={e => handleChange("y", Number(e.target.value))} />
           </Box>
-        </Box>
+        </Box> */}
 
         {/* Size */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Size</Typography>
-          <Box sx={{ display: 'flex', gap: 0.5 }}>
-            <StyledInput type="number" value={Math.round(propsState.width)} onChange={e => handleChange("width", Number(e.target.value))} />
-            <StyledInput type="number" value={Math.round(propsState.height)} onChange={e => handleChange("height", Number(e.target.value))} />
-          </Box>
-        </Box>
+       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 140 }}>
+  
+  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+    {/* Width */}
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <Typography variant="caption" sx={{ fontSize: '9px', color: '#6b7280', mb: 0.2 }}>
+        W
+      </Typography>
+      <StyledInput
+        type="number"
+        value={Math.round(propsState.width)}
+        onChange={e => handleChange("width", Number(e.target.value))}
+        inputProps={{ min: 1 }}
+      />
+    </Box>
+
+    {/* Height */}
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <Typography variant="caption" sx={{ fontSize: '9px', color: '#6b7280', mb: 0.2 }}>
+        H
+      </Typography>
+      <StyledInput
+        type="number"
+        value={Math.round(propsState.height)}
+        onChange={e => handleChange("height", Number(e.target.value))}
+        inputProps={{ min: 1 }}
+      />
+    </Box>
+  </Box>
+</Box>
+
 
         {/* Rotation */}
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -353,11 +391,129 @@ return (
           <StyledInput type="number" value={Math.round(propsState.angle)} onChange={e => handleChange("angle", Number(e.target.value))} />
         </Box>
 
-        {/* Opacity */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <OpacityIcon sx={{ fontSize: 14, color: '#6b7280', mb: 0.5 }} />
-          <StyledSlider value={propsState.opacity} min={0} max={1} step={0.01} onChange={(_, v) => handleChange("opacity", v)} />
+      {/* Opacity */}
+<Tooltip title="Transparency">
+  <IconButton size="small" onClick={(e) => setAnchorOpacity(e.currentTarget)}>
+    <OpacityIcon />
+  </IconButton>
+</Tooltip>
+
+<Popover
+  open={Boolean(anchorOpacity)}
+  anchorEl={anchorOpacity}
+  onClose={() => setAnchorOpacity(null)}
+  anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+  transformOrigin={{ vertical: "top", horizontal: "center" }}
+  sx={{ mt: 2 }} 
+>
+  <Box
+    sx={{
+      p: 2.5,
+      width: 260,
+      borderRadius: 2,
+      boxShadow: 3,
+      bgcolor: "background.paper",
+    }}
+  >
+    <Typography sx={{ fontSize: 14, fontWeight: 500, mb: 1.5 }}>
+      Opacity
+    </Typography>
+
+    <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+      <Slider
+        value={opacity}
+        min={0}
+        max={100}
+        step={1}
+        onChange={(_, val) => {
+          const value = val as number;
+          setOpacity(value);
+          applyOpacity(value);
+        }}
+        sx={{ flex: 1 }}
+      />
+      <TextField
+        value={opacity}
+        onChange={(e) => {
+          let value = Number(e.target.value);
+          if (value > 100) value = 100;
+          if (value < 0) value = 0;
+          setOpacity(value);
+          applyOpacity(value);
+        }}
+        inputProps={{
+          min: 0,
+          max: 100,
+          type: "number",
+          style: { width: 40, fontSize: 12, textAlign: "center" },
+        }}
+        size="small"
+      />
+    </Box>
+  </Box>
+</Popover>
+
+
+                {/* Radius */}
+{(selectedObject.type === 'rect' || selectedObject.type === 'circle' || selectedObject.type === 'triangle' ||selectedObject.type==='poly') && (
+  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+    <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Radius</Typography>
+    <Tooltip title="Radius">
+      <ColorIconButton
+        onClick={(e) => {
+          setRadiusPopoverOpen(!radiusPopoverOpen);
+          setRadiusAnchorEl(e.currentTarget);
+        }}
+        sx={{ backgroundColor: '#f3f4f6' }}
+      >
+        {/* Small circle to represent radius */}
+        <Box sx={{
+          width: 12,
+          height: 12,
+          borderRadius: '50%',
+          backgroundColor: '#6b7280',
+        }} />
+      </ColorIconButton>
+    </Tooltip>
+
+    <Popover
+      open={radiusPopoverOpen}
+      anchorEl={radiusAnchorEl}
+      onClose={() => setRadiusPopoverOpen(false)}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      transformOrigin={{ vertical: 'top', horizontal: 'center' }}
+        sx={{ mt: 2 }} 
+    >
+      
+      <Box sx={{ p: 4, display: 'flex', flexDirection: 'column', gap: 0, minWidth: 200,
+      width: 260,
+      borderRadius: 2,
+      boxShadow: 3,
+      bgcolor: "background.paper", }}>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: '#6b7280' }}>Radius</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 , borderRadius: 3,}}>
+          <StyledSlider
+            value={propsState.radius}
+            min={0}
+            max={50}   
+            step={1}
+            onChange={(_, v) => handleChange("radius", v)}
+            sx={{ flex: 1 }}
+          />
+          <StyledInput
+            type="number"
+            value={propsState.radius}
+            onChange={e => handleChange("radius", Number(e.target.value))}
+            inputProps={{ min: 0, max: 50 }}
+            sx={{ width: 50 }}
+          />
         </Box>
+      </Box>
+    </Popover>
+  </Box>
+)}
+
+
 
         {/* Fill */}
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
@@ -454,36 +610,78 @@ return (
           </Tooltip>
         </Box>
 
-        {/* Shadow */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
-          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Shadow</Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Tooltip title="Shadow Color">
-              <ColorIconButton onClick={() => setShadowPickerOpen(!shadowPickerOpen)} sx={{ backgroundColor: propsState.shadowColor, opacity: propsState.shadowBlur > 0 ? 1 : 0.5 }}>
-                <ReplayIcon sx={{ fontSize: 16 }} />
-              </ColorIconButton>
-            </Tooltip>
-            <StyledSlider value={propsState.shadowBlur} min={0} max={20} step={1} onChange={(_, v) => handleChange("shadowBlur", v)} />
+      
+
+{/* Shadow */}
+<Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+  <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Shadow</Typography>
+
+  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+    <Tooltip title="Shadow Color">
+      <ColorIconButton
+        onClick={(e) => setAnchorEl(e.currentTarget)}
+        sx={{ backgroundColor: propsState.shadowColor, opacity: propsState.shadowBlur > 0 ? 1 : 0.5 }}
+      >
+        <ReplayIcon sx={{ fontSize: 16 }} />
+      </ColorIconButton>
+    </Tooltip>
+    <StyledSlider
+      value={propsState.shadowBlur}
+      min={0}
+      max={20}
+      step={1}
+      onChange={(_, v) => handleChange("shadowBlur", v)}
+    />
+  </Box>
+
+  {/* Popover for Shadow Color */}
+  <Popover
+    open={Boolean(anchorEl)}
+    anchorEl={anchorEl}
+    onClose={() => setAnchorEl(null)}
+    anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+    transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+  >
+    <Box sx={{ p: 1 }}>
+      <ChromePicker
+        color={propsState.shadowColor}
+        onChangeComplete={(color: { hex: string }) => {
+          handleChange('shadowColor', color.hex);
+          setAnchorEl(null);
+        }}
+        disableAlpha
+      />
+      <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Typography variant="caption" sx={{ fontWeight: 600 }}>Shadow Offset</Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="caption" sx={{ fontSize: '10px' }}>X</Typography>
+            <StyledSlider
+              value={propsState.shadowOffsetX}
+              min={-20}
+              max={20}
+              step={1}
+              onChange={(_, v) => handleChange("shadowOffsetX", v)}
+              sx={{ width: 80 }}
+            />
           </Box>
-          {shadowPickerOpen && (
-            <ColorPickerPanel>
-              <ChromePicker color={propsState.shadowColor} onChangeComplete={(color: { hex: string }) => { handleChange('shadowColor', color.hex); setShadowPickerOpen(false) }} disableAlpha />
-              <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Typography variant="caption" sx={{ fontWeight: 600 }}>Shadow Offset</Typography>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <Box sx={{ flex: 1 }}>
-                    <Typography variant="caption" sx={{ fontSize: '10px' }}>X</Typography>
-                    <StyledSlider value={propsState.shadowOffsetX} min={-20} max={20} step={1} onChange={(_, v) => handleChange("shadowOffsetX", v)} sx={{ width: 80 }} />
-                  </Box>
-                  <Box sx={{ flex: 1 }}>
-                    <Typography variant="caption" sx={{ fontSize: '10px' }}>Y</Typography>
-                    <StyledSlider value={propsState.shadowOffsetY} min={-20} max={20} step={1} onChange={(_, v) => handleChange("shadowOffsetY", v)} sx={{ width: 80 }} />
-                  </Box>
-                </Box>
-              </Box>
-            </ColorPickerPanel>
-          )}
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="caption" sx={{ fontSize: '10px' }}>Y</Typography>
+            <StyledSlider
+              value={propsState.shadowOffsetY}
+              min={-20}
+              max={20}
+              step={1}
+              onChange={(_, v) => handleChange("shadowOffsetY", v)}
+              sx={{ width: 80 }}
+            />
+          </Box>
         </Box>
+      </Box>
+    </Box>
+  </Popover>
+</Box>
+
 
         {/* Actions */}
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>

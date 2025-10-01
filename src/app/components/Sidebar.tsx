@@ -53,6 +53,7 @@ interface SidebarProps {
   onBringToFront: () => void;
   onSendToBack: () => void;
   onDrawMode: () => void; 
+    drawMode: boolean; 
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
