@@ -7,26 +7,28 @@ import * as fabric from "fabric";
 
 
 
+
 const PANEL_TOP = 80;
 
 const PanelContainer = styled(Box, {
   shouldForwardProp: (prop) => prop !== 'isOpen'
 })<{ isOpen?: boolean }>(({ isOpen }) => ({
-  position: 'fixed',
-  right: 0,                
-  top: PANEL_TOP,          
-  width: 400,
+  position: 'fixed',            
+  top: PANEL_TOP,               
+  right: 0,                    
+  width: 400,                   
   height: `calc(100vh - ${PANEL_TOP}px)`,
   backgroundColor: '#ffffff',
   borderLeft: '1px solid #e5e7eb',
   display: 'flex',
   flexDirection: 'column',
-  overflow: 'hidden',      
+  overflow: 'hidden',
   transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
   transition: 'transform 0.3s ease',
   zIndex: 1000,
-
 }));
+
+
 
 
 
@@ -182,8 +184,22 @@ const animations = [
   { id: "colorFlash", name: "Color Flash", icon: "✦" },
   { id: "sway", name: "Sway", icon: "⤾" },
 { id: "bounceUp", name: "Bounce Up", icon: "⥣" },
-
+// New animations from screenshot
+  { id: "drift", name: "Drift", icon: "⇄" },
+  { id: "tectonic", name: "Tectonic", icon: "⇆" },
+  { id: "tumble", name: "Tumble", icon: "⟳" },
+  { id: "neon", name: "Neon", icon: "💡" },
+  { id: "scrapbook", name: "Scrapbook", icon: "📄" },
+  { id: "stomp", name: "Stomp", icon: "⬛" },
+  { id: "photoFlow", name: "Photo Flow", icon: "📷↓" },
+  { id: "photoRise", name: "Photo Rise", icon: "📷↑" },
+  { id: "photoZoom", name: "Photo Zoom", icon: "🔍" },
+  { id: "rotate", name: "Rotate", icon: "↻" },
+  { id: "flicker", name: "Flicker", icon: "⚡" },
+  { id: "pulse", name: "Pulse", icon: "⬤" },
+  { id: "wiggle", name: "Wiggle", icon: "〰️" },
 ];
+
 
 const AnimationPanel: React.FC<AnimationPanelProps> = ({ onClose, canvas, selectedObject }) => {
   const [activeTab, setActiveTab] = useState<"page" | "text">("text");
@@ -431,9 +447,79 @@ case "bounceUp":
     onChange: () => canvas.renderAll(),
   });
   break;
+
+
+  case "drift":
+  obj.animate({ left: (obj.left || 0) + 10, top: (obj.top || 0) + 5 }, { duration, onChange: () => canvas.renderAll() });
+  break;
+
+case "tectonic":
+  obj.animate({ left: (obj.left || 0) + 5, top: (obj.top || 0) - 5 }, { duration, onChange: () => canvas.renderAll() });
+  break;
+
+case "tumble":
+  obj.set({ angle: -360 });
+  obj.animate({ angle: 0 }, { duration, onChange: () => canvas.renderAll() });
+  break;
+
+case "neon":
+  let neonOn = false;
+  const neonInterval = setInterval(() => {
+    obj.set({ stroke: neonOn ? "#8b5cf6" : "#ffffff" });
+    canvas.renderAll();
+    neonOn = !neonOn;
+  }, 300);
+  break;
+
+case "scrapbook":
+  obj.set({ angle: -10, left: (originalLeft || 0) - 5 });
+  obj.animate({ angle: 0, left: originalLeft }, { duration, onChange: () => canvas.renderAll() });
+  break;
+
+case "stomp":
+  obj.set({ scaleY: 0 });
+  obj.animate({ scaleY: 1 }, { duration, onChange: () => canvas.renderAll() });
+  break;
+
+case "photoFlow":
+  obj.set({ top: (originalTop || 0) - 100, opacity: 0 });
+  obj.animate({ top: originalTop, opacity: 1 }, { duration, onChange: () => canvas.renderAll() });
+  break;
+
+case "photoRise":
+  obj.set({ top: (originalTop || 0) + 100, opacity: 0 });
+  obj.animate({ top: originalTop, opacity: 1 }, { duration, onChange: () => canvas.renderAll() });
+  break;
+
+case "photoZoom":
+  obj.set({ scaleX: 0, scaleY: 0, opacity: 0 });
+  obj.animate({ scaleX: originalScaleX, scaleY: originalScaleY, opacity: 1 }, { duration, onChange: () => canvas.renderAll() });
+  break;
+
+case "flicker":
+  let flickerOn = true;
+  const flickerInterval = setInterval(() => {
+    obj.set({ opacity: flickerOn ? 0 : 1 });
+    canvas.renderAll();
+    flickerOn = !flickerOn;
+  }, 150);
+  break;
+
+case "wiggle":
+  let wiggleCount = 0;
+  const wiggleInterval = setInterval(() => {
+    obj.set({ left: (originalLeft || 0) + (wiggleCount % 2 === 0 ? 5 : -5) });
+    canvas.renderAll();
+    wiggleCount++;
+    if (wiggleCount > 6) {
+      obj.set({ left: originalLeft });
+      clearInterval(wiggleInterval);
+    }
+  }, 50);
+  break;
+
     }
   };
-
 
   const applyAnimation = () => {
     if (!selectedObject || !canvas || !selectedAnimation) return;

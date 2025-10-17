@@ -1,5 +1,6 @@
 "use client";
-import ThemeRegistry from '../app/components/ThemeRegistry';
+import ThemeRegistry from './components/ThemeRegistry';
+import { AuthProvider } from '../hooks/context/AuthContext';
 
 export default function RootLayout({
   children,
@@ -10,7 +11,9 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <ThemeRegistry>
-          {children}
+          <AuthProvider>
+            {children}
+          </AuthProvider>
         </ThemeRegistry>
       </body>
     </html>

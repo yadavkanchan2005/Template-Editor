@@ -16,7 +16,6 @@ import FormatAlignRightIcon from "@mui/icons-material/FormatAlignRight";
 import AnimationIcon from "@mui/icons-material/Animation";
 import SpacingIcon from '@mui/icons-material/FormatLineSpacing';
 import Popover from '@mui/material/Popover';
-import ReplayIcon from "@mui/icons-material/Replay";
 import { styled } from '@mui/material/styles';
 import VerticalAlignTopIcon from '@mui/icons-material/VerticalAlignTop';
 import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter';
@@ -25,6 +24,7 @@ import UppercaseIcon from '@mui/icons-material/ArrowUpward';
 import LowercaseIcon from '@mui/icons-material/ArrowDownward';
 import BlurOnIcon from "@mui/icons-material/BlurOn";
 import AnimationPanel from "./AnimationSidebar/AnimationPanel";
+import ColorPicker from "./data/ColorPicker";
 
 const anchorIcons: Record<string, React.ReactNode> = {
     top: <VerticalAlignTopIcon />,
@@ -77,7 +77,12 @@ const TextPropertiesPanel: React.FC<TextPropertiesPanelProps> = ({
     const [opacity, setOpacity] = useState(100);
     const [anchorOpacity, setAnchorOpacity] = useState<null | HTMLElement>(null);
     const [availableFonts, setAvailableFonts] = useState<string[]>(systemFonts);
-const [showAnimationPanel, setShowAnimationPanel] = useState(false);
+    const [showAnimationPanel, setShowAnimationPanel] = useState(false);
+
+   // Color Picker States
+    const [colorPickerOpen, setColorPickerOpen] = useState(false);
+    const [colorPickerType, setColorPickerType] = useState<'fill' | 'stroke' | null>(null);
+
     const [textSpacing, setTextSpacing] = useState({
         letterSpacing: 0,
         lineHeight: 1.2,
@@ -106,21 +111,49 @@ const [showAnimationPanel, setShowAnimationPanel] = useState(false);
         color: '#000000',
     });
 
+     // Load Google Font dynamically
+    const loadGoogleFont = (fontFamily: string) => {
+        // Don't load system fonts
+        if (systemFonts.includes(fontFamily)) {
+            return Promise.resolve();
+        }
+
+        return new Promise<void>((resolve) => {
+            const fontFamilyFormatted = fontFamily.replace(/ /g, "+");
+            
+            // Check if already loaded
+            const existingLink = document.querySelector(`link[href*="${fontFamilyFormatted}"]`);
+            if (existingLink) {
+                resolve();
+                return;
+            }
+
+            // Create link element
+            const link = document.createElement("link");
+            link.href = `https://fonts.googleapis.com/css2?family=${fontFamilyFormatted}:wght@400;600;700;800&display=swap`;
+            link.rel = "stylesheet";
+            
+            link.onload = () => resolve();
+            link.onerror = () => resolve(); // Resolve even on error
+            
+            document.head.appendChild(link);
+        });
+    };
+
     // Fetch Google Fonts
     const fetchGoogleFonts = async () => {
         if (availableFonts.length > systemFonts.length) return;
         const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_FONTS_API_KEY;
         try {
-            const res = await fetch(`https://www.googleapis.com/webfonts/v1/webfonts?key=${API_KEY}`);
+            const res = await fetch(`https://www.googleapis.com/webfonts/v1/webfonts?key=${API_KEY}&sort=popularity`);
             const data = await res.json();
-            const googleFonts = data.items.map((f: any) => f.family);
+            const googleFonts = data.items.slice(0, 100).map((f: any) => f.family);
             setAvailableFonts(prev => Array.from(new Set([...prev, ...googleFonts])));
         } catch (err) {
             console.error("Failed to load Google Fonts", err);
         }
     };
 
-    // for transparency
 
     // Apply opacity to text
     const applyOpacity = (value: number) => {
@@ -132,25 +165,27 @@ const [showAnimationPanel, setShowAnimationPanel] = useState(false);
         canvas.requestRenderAll();
     };
 
-
-    const handleChangeTextColor = (color: string) => {
-        if (!selectedObject || selectedObject.type !== "i-text" || !canvas) return;
-        const iText = selectedObject as fabric.IText;
-
-
-        const start = iText.selectionStart ?? 0;
-        const end = iText.selectionEnd ?? 0;
-
-        if (start !== end) {
-            iText.setSelectionStyles({ fill: color }, start, end);
+  // Handle color change from Color Picker
+    const handleColorChange = (color: string | any) => {
+        if (!colorPickerType) return;
+        
+        // Check if it's a gradient object
+        if (typeof color === 'object' && color.type) {
+            // For gradients, only fill is supported in text
+            if (colorPickerType === 'fill') {
+                handleChange('fill', color.background);
+            }
         } else {
-            iText.set({ fill: color });
+            // For solid colors
+            handleChange(colorPickerType, color);
         }
-
-        canvas.requestRenderAll();
-        setTextProps((prev) => ({ ...prev, fill: color }));
     };
 
+    // Open color picker
+    const openColorPicker = (type: 'fill' | 'stroke') => {
+        setColorPickerType(type);
+        setColorPickerOpen(true);
+    };
 
 
     useEffect(() => {
@@ -167,8 +202,8 @@ const [showAnimationPanel, setShowAnimationPanel] = useState(false);
                     fontWeight: txt.fontWeight || "normal",
                     fontStyle: txt.fontStyle || "normal",
                     underline: txt.underline || false,
-                    fill: typeof txt.fill === "string" ? txt.fill : "#000000",
-                    stroke: typeof txt.stroke === "string" ? txt.stroke : "#000000",
+                     fill: typeof txt.fill === "string" ? txt.fill : "#8947d4ff",
+                    stroke: typeof txt.stroke === "string" ? txt.stroke : "#a661adff",
                     strokeWidth: txt.strokeWidth || 0,
                     textAlign: txt.textAlign || "left",
                     effect: txt.textEffect || "None",
@@ -774,50 +809,40 @@ const [showAnimationPanel, setShowAnimationPanel] = useState(false);
                 <div style={{ width: "1px", height: "24px", backgroundColor: "#e5e7eb" }} />
 
 
-                {/* Fill Color */}
+                 {/* Fill Color - Opens Canva Color Picker */}
                 <Tooltip title="Text Color">
-                    <label style={{ position: "relative", cursor: "pointer" }}>
-                        <StyledIconButton size="small">
-                            <FormatColorFillIcon />
-                        </StyledIconButton>
-                        <input
-                            type="color"
-                            value={textProps.fill}
-                            onChange={(e) => handleChange("fill", e.target.value)}
-                            style={{
-                                position: "absolute",
-                                top: 0,
-                                left: 0,
-                                width: "100%",
-                                height: "100%",
-                                opacity: 0,
-                                cursor: "pointer",
-                            }}
-                        />
-                    </label>
+                    <StyledIconButton 
+                        size="small"
+                        onClick={() => openColorPicker('fill')}
+                        data-color-button="fill"
+                        sx={{
+                            backgroundColor: textProps.fill,
+                            border: "2px solid #e5e7eb",
+                            "&:hover": {
+                                borderColor: "#7c3aed",
+                            }
+                        }}
+                    >
+                        <FormatColorFillIcon sx={{ color: "white", mixBlendMode: "difference" }} />
+                    </StyledIconButton>
                 </Tooltip>
 
-                {/* Stroke Color */}
+                {/* Stroke Color - Opens Canva Color Picker */}
                 <Tooltip title="Stroke Color">
-                    <label style={{ position: "relative", cursor: "pointer" }}>
-                        <StyledIconButton size="small">
-                            <BorderColorIcon />
-                        </StyledIconButton>
-                        <input
-                            type="color"
-                            value={textProps.stroke}
-                            onChange={(e) => handleChange("stroke", e.target.value)}
-                            style={{
-                                position: "absolute",
-                                top: 0,
-                                left: 0,
-                                width: "100%",
-                                height: "100%",
-                                opacity: 0,
-                                cursor: "pointer",
-                            }}
-                        />
-                    </label>
+                    <StyledIconButton 
+                        size="small"
+                        onClick={() => openColorPicker('stroke')}
+                        data-color-button="stroke"
+                        sx={{
+                            backgroundColor: textProps.stroke,
+                            border: "2px solid #e5e7eb",
+                            "&:hover": {
+                                borderColor: "#7c3aed",
+                            }
+                        }}
+                    >
+                        <BorderColorIcon sx={{ color: "white", mixBlendMode: "difference" }} />
+                    </StyledIconButton>
                 </Tooltip>
 
                 {/* Stroke Width */}
@@ -830,8 +855,6 @@ const [showAnimationPanel, setShowAnimationPanel] = useState(false);
                     placeholder="Stroke"
                     sx={{ width: 70 }}
                 />
-
-
 
                 {/* Divider */}
                 <div style={{ width: "1px", height: "24px", backgroundColor: "#e5e7eb" }} />
@@ -912,6 +935,19 @@ const [showAnimationPanel, setShowAnimationPanel] = useState(false);
          selectedObject={selectedObject as fabric.FabricObject | null}
         />
       )}
+
+         {/* Canva Color Picker Component */}
+            <ColorPicker
+                isOpen={colorPickerOpen}
+                onClose={() => {
+                    setColorPickerOpen(false);
+                    setColorPickerType(null);
+                }}
+                currentColor={colorPickerType === 'fill' ? textProps.fill : textProps.stroke}
+                onColorChange={handleColorChange}
+                title={colorPickerType === 'fill' ? 'Text colour' : 'Stroke colour'}
+                allowGradients={false} // Text doesn't support gradients typically
+            />
         </>
        
     );

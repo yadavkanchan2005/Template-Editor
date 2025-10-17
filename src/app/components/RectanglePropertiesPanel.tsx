@@ -9,10 +9,9 @@ import {
   Tooltip,
   Button,
   Typography,
-  ButtonGroup,
-  Paper,
-   Popover,
-  Select, MenuItem,
+  Select,
+  MenuItem,
+  Popover,
 } from "@mui/material";
 import { styled } from "@mui/material/styles";
 import { ChromePicker } from "react-color";
@@ -26,107 +25,113 @@ import {
   FormatColorFill as FormatColorFillIcon,
   BorderColor as BorderColorIcon,
   Flip as FlipIcon,
-  Replay as ReplayIcon,
-  BorderStyle as BorderStyleIcon,
-    Animation as AnimationIcon,
-     Lock,
-  LockOpen,
-  Visibility,
-  VisibilityOff,
+
+  Animation as AnimationIcon,
+  SquareRounded,
+  Close as CloseIcon, 
 } from "@mui/icons-material";
+import ReplayIcon from "@mui/icons-material/Replay"; 
 import CommandManager, { Command } from "@/lib/CommandManager";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import ColorPicker from "./data/ColorPicker";
 import AnimationPanel from "./AnimationSidebar/AnimationPanel";
 
 
-const StyledInput = styled(TextField)({
-  width: 60,
+interface CustomIconProps {
+  name: 'Rotate' | 'CornerRounding' | 'FillColor' | 'BorderColor' | 'FlipHorizontal' | 'FlipVertical' | 'ShadowEffect' | 'Animate';
+  style?: React.CSSProperties;
+}
+
+const CustomIcon: React.FC<CustomIconProps> = ({ name, style }) => {
+  let IconText = '';
+  switch (name) {
+    case 'Rotate': IconText = 'Rot'; break;
+case 'CornerRounding':
+  return (
+    <svg
+      width={30}      
+      height={30}   
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path
+        d="M8 20C8 13.3726 13.3726 8 20 8"
+        stroke={ 'currentColor'} 
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </svg>
+  );
+
+
+    case 'FillColor': IconText = 'Fill'; break;
+    case 'BorderColor': IconText = 'Brdr'; break;
+    case 'FlipHorizontal': return <FlipIcon sx={{ fontSize: 18, transform: "scaleX(-1)" }} />; 
+    case 'FlipVertical': return <FlipIcon sx={{ fontSize: 18 }} />; 
+    case 'ShadowEffect': IconText = 'Shdw'; break;
+    case 'Animate': return <AnimationIcon sx={{ fontSize: 18 }} />; 
+    default: IconText = '';
+  }
+
+  if (IconText) {
+    return <Typography sx={{ fontSize: 10, fontWeight: 700, color: 'inherit', ...style }}>{IconText}</Typography>;
+  }
+  return null;
+};
+
+
+
+
+const StyledInput = styled(TextField)({ 
+  width: 55,
   marginRight: 4,
   "& .MuiOutlinedInput-root": {
-    height: "32px",
+    height: "28px",
     fontSize: "12px",
-    "& fieldset": { borderColor: "#e2e8f0" },
-    "&:hover fieldset": { borderColor: "#c084fc" },
-    "&.Mui-focused fieldset": { borderColor: "#9333ea" },
-    backgroundColor: "white",
     borderRadius: "6px",
+    backgroundColor: "white",
+    "& fieldset": { borderColor: "#e2e8f0" },
+    "&:hover fieldset": { borderColor: "#a0aec0" },
+    "&.Mui-focused fieldset": { borderColor: "#4338ca", borderWidth: '1px' },
   },
   "& input": {
-    padding: "6px 8px",
+    padding: "4px 8px",
     textAlign: "center",
   },
 });
 
-const StyledSlider = styled(Slider)({
-  width: 100,
-  color: "#9333ea",
-  marginRight: 8,
-  "& .MuiSlider-thumb": {
-    width: 16,
-    height: 16,
-    backgroundColor: "#ffffff",
-    border: "2px solid #9333ea",
-    "&:hover, &.Mui-focusVisible": {
-      boxShadow: "0 0 0 8px rgba(147, 51, 234, 0.16)",
-    },
-  },
-  "& .MuiSlider-track": {
-    height: 4,
-    borderRadius: 2,
-  },
-  "& .MuiSlider-rail": {
-    height: 4,
-    backgroundColor: "#e2e8f0",
-    borderRadius: 2,
-  },
-});
 
-const ColorIconButton = styled(IconButton)({
-  width: 32,
-  height: 32,
-  marginRight: 8,
-  border: "1px solid #e2e8f0",
+const CanvaIconButton = styled(IconButton, {
+  shouldForwardProp: (prop) => prop !== 'isActive',
+})<{ isActive?: boolean }>(({ isActive }) => ({
+  width: 30,
+  height: 30,
+  padding: 0,
+  marginRight: 4,
   borderRadius: "6px",
-  "&:hover": {
-    borderColor: "#9333ea",
-    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+  color: isActive ? '#4338ca' : '#6b7280',
+  backgroundColor: isActive ? '#e0e7ff' : '#ffffff',
+  border: isActive ? '1px solid #4338ca' : '1px solid #e2e8f0', 
+  boxShadow: 'none',
+  transition: 'all 0.15s ease-in-out',
+  '&:hover': {
+    backgroundColor: '#f3f4f6',
+    color: '#4338ca',
+    border: '1px solid #4338ca', 
+    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
   },
-});
+}));
 
-const ActionButton = styled(IconButton)({
-  width: 32,
-  height: 32,
-  marginRight: 8,
-  backgroundColor: "#f8fafc",
-  borderRadius: "6px",
-  border: "1px solid #e2e8f0",
-  "&:hover": {
-    backgroundColor: "#f1f5f9",
-    borderColor: "#c084fc",
-  },
-});
-
-
-const ColorPickerPanel = styled(Paper)({
-  position: 'fixed',
-  zIndex: 9999,
-  padding: "8px",
-  backgroundColor: "#ffffff",
-  border: "1px solid #e2e8f0",
-  borderRadius: "8px",
-  boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
-});
-
-const GradientPanel = styled(Paper)({
-  position: 'fixed',
-  zIndex: 10000,
-  padding: "12px",
-  marginLeft: "80",
-  backgroundColor: "#ffffff",
-  border: "1px solid #e2e8f0",
-  borderRadius: "8px",
-  boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
-  minWidth: "200px",
+const PropertyGroup = styled(Box)({
+  display: 'flex',
+  alignItems: 'center',
+  paddingRight: '12px',
+  marginRight: '12px',
+  borderRight: '1px solid #e5e7eb',
+  height: '40px',
 });
 
 
@@ -136,8 +141,7 @@ interface RectanglePropertiesPanelProps {
   manager: CommandManager | null;
 }
 
-
-const strokeStyles = [
+const strokeStyles = [ /* ... (Same as before) ... */
   { key: "solid", dash: [] },
   { key: "dashed", dash: [10, 5] },
   { key: "dotted", dash: [2, 5] },
@@ -145,7 +149,6 @@ const strokeStyles = [
   { key: "double", dash: [2, 2, 10, 2] },
   { key: "wavy", dash: [] },
 ];
-
 
 const RectanglePropertiesPanel: React.FC<RectanglePropertiesPanelProps> = ({
   canvas,
@@ -160,17 +163,18 @@ const RectanglePropertiesPanel: React.FC<RectanglePropertiesPanelProps> = ({
     strokeAlign: "center", radius: 0, sides: 3,
     strokeStyle: "solid",
   });
-const [radiusPopoverOpen, setRadiusPopoverOpen] = useState(false);
-const [radiusAnchorEl, setRadiusAnchorEl] = useState<HTMLElement | null>(null);
+  const [radiusPopoverOpen, setRadiusPopoverOpen] = useState(false);
+  const [radiusAnchorEl, setRadiusAnchorEl] = useState<HTMLElement | null>(null);
   const [clipboard, setClipboard] = useState<fabric.Object | null>(null);
-  const [fillPickerOpen, setFillPickerOpen] = useState(false);
-  const [strokePickerOpen, setStrokePickerOpen] = useState(false);
-  const [shadowPickerOpen, setShadowPickerOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
-  const [gradientPanelOpen, setGradientPanelOpen] = useState(false);
-const [showAnimationPanel, setShowAnimationPanel] = useState(false);
- const [opacity, setOpacity] = useState(100);
-    const [anchorOpacity, setAnchorOpacity] = useState<null | HTMLElement>(null);
+  const [showAnimationPanel, setShowAnimationPanel] = useState(false);
+  const [opacity, setOpacity] = useState(100);
+  const [anchorOpacity, setAnchorOpacity] = useState<null | HTMLElement>(null);
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [colorPickerType, setColorPickerType] = useState<'fill' | 'stroke' | 'shadow' | null>(null);
+  const [layerPopoverOpen, setLayerPopoverOpen] = useState(false);
+const [layerAnchorEl, setLayerAnchorEl] = useState<HTMLElement | null>(null);
+
 
 
   useEffect(() => {
@@ -186,18 +190,17 @@ const [showAnimationPanel, setShowAnimationPanel] = useState(false);
     else if (dashArray[0] === 10 && dashArray[1] === 5) style = "dashed";
     else if (dashArray[0] === 2 && dashArray[1] === 5) style = "dotted";
     else if (dashArray[0] === 15 && dashArray[1] === 5 && dashArray[2] === 2 && dashArray[3] === 5) style = "dash-dot";
-    setPropsState((prev: any) => ({ ...prev, strokeStyle: style, stroke: selectedObject.stroke ?? "#000000", strokeWidth: selectedObject.strokeWidth ?? 1 }));
-
-
+    
+    if (selectedObject.type === "rect") radius = (selectedObject as fabric.Rect).rx ?? 0;
     if (selectedObject.type === "circle") radius = (selectedObject as fabric.Circle).radius ?? 0;
     if (selectedObject.type === "polygon") sides = (selectedObject as any).points?.length ?? 3;
     if (selectedObject.type === "triangle") sides = 3;
 
+
     setPropsState({
       x: selectedObject.left ?? 0,
       y: selectedObject.top ?? 0,
-      width, height,
-      fill: (selectedObject.fill as string) ?? "#BEF4FF",
+      width, height, fill: (selectedObject.fill as string) ?? "#BEF4FF",
       stroke: (selectedObject.stroke as string) ?? "#000000",
       strokeWidth: selectedObject.strokeWidth ?? 1,
       opacity: selectedObject.opacity ?? 1,
@@ -212,500 +215,554 @@ const [showAnimationPanel, setShowAnimationPanel] = useState(false);
       radius,
       sides,
       strokeStyle: style,
+      
+      
     });
+    setOpacity(Math.round((selectedObject.opacity ?? 1) * 100));
   }, [selectedObject]);
 
-  // Change handler
-  const handleChange = (prop: string, value: any) => {
-    if (!selectedObject || !canvas || !manager) return;
-    const prevValue = propsState[prop];
-    const command: Command = {
-      do: () => { applyProp(selectedObject, prop, value); canvas.requestRenderAll(); setPropsState((prev: any) => ({ ...prev, [prop]: value })); },
-      undo: () => { applyProp(selectedObject, prop, prevValue); canvas.requestRenderAll(); setPropsState((prev: any) => ({ ...prev, [prop]: prevValue })); },
-    };
-    manager.execute(command);
+
+  const handleChange = (prop: string, value: any) => { /* ... */ 
+      if (!selectedObject || !canvas || !manager) return;
+      const prevValue = propsState[prop];
+      const command: Command = {
+        do: () => { applyProp(selectedObject, prop, value); canvas.requestRenderAll(); setPropsState((prev: any) => ({ ...prev, [prop]: value })); },
+        undo: () => { applyProp(selectedObject, prop, prevValue); canvas.requestRenderAll(); setPropsState((prev: any) => ({ ...prev, [prop]: prevValue })); },
+      };
+      manager.execute(command);
   };
 
-  const applyProp = (obj: fabric.Object, prop: string, value: any) => {
-    if (!obj) return;
+  const applyProp = (obj: fabric.Object, prop: string, value: any) => { /* ... */
+      if (!obj) return;
 
-    switch (prop) {
-      case "x": obj.set("left", value); break;
-      case "y": obj.set("top", value); break;
-      case "width":
-        if (obj.type === "image") {
-          (obj as fabric.Image).scaleToWidth(value);
-        } else {
-          obj.set("width", value / (obj.scaleX ?? 1));
-        }
-        break;
-      case "height":
-        if (obj.type === "image") {
-          (obj as fabric.Image).scaleToHeight(value);
-        } else {
-          obj.set("height", value / (obj.scaleY ?? 1));
-        }
-        break;
+      switch (prop) {
+        case "x": obj.set("left", value); break;
+        case "y": obj.set("top", value); break;
+        case "width":
+          if (obj.type === "image") {
+            (obj as fabric.Image).scaleToWidth(value);
+          } else {
+            obj.set("width", value / (obj.scaleX ?? 1));
+          }
+          break;
+        case "height":
+          if (obj.type === "image") {
+            (obj as fabric.Image).scaleToHeight(value);
+          } else {
+            obj.set("height", value / (obj.scaleY ?? 1));
+          }
+          break;
 
-      case "fill": obj.set("fill", value); break;
-      case "stroke": obj.set("stroke", value); break;
-      case "strokeWidth": obj.set("strokeWidth", value); break;
-      case "strokeAlign": obj.set("strokeAlign", value); break;
-      case "opacity": obj.set("opacity", value); break;
-      case "angle": obj.set("angle", value); break;
-      case "flipX":obj.set(prop, value); break
-      case "flipY": obj.set(prop, value); break;
-      case "shadowColor":
-      case "shadowBlur":
-      case "shadowOffsetX":
-      case "shadowOffsetY":
-        const shadow = obj.shadow ? new fabric.Shadow(obj.shadow) : new fabric.Shadow({ color: '#000000', blur: 0, offsetX: 0, offsetY: 0 });
-        if (prop === "shadowColor") shadow.color = value;
-        if (prop === "shadowBlur") shadow.blur = value;
-        if (prop === "shadowOffsetX") shadow.offsetX = value;
-        if (prop === "shadowOffsetY") shadow.offsetY = value;
-        obj.set("shadow", shadow);
-        break;
-      case "radius":
-        if (obj.type === "rect") (obj as fabric.Rect).set({ rx: value, ry: value });
-        if (obj.type === "circle") (obj as fabric.Circle).set({ radius: value });
-        if (obj.type === "triangle") {
-          const t = obj as fabric.Triangle;
-          const w = t.width ?? 50;
-          const h = t.height ?? 50;
-          t.set({ width: w + value, height: h + value });
-        }
-        break;
-      case "sides":
-        if (obj.type === "polygon") {
-          const poly = obj as fabric.Polygon;
-          const r = Math.min(poly.width ?? 50, poly.height ?? 50) / 2;
-          const points = Array.from({ length: value }, (_, i) => {
-            const angle = (i * 2 * Math.PI) / value - Math.PI / 2;
-            return { x: r + r * Math.cos(angle), y: r + r * Math.sin(angle) };
-          });
-          poly.set({ points });
-        }
-        break;
+        case "fill": obj.set("fill", value); break;
+        case "stroke": obj.set("stroke", value); break;
+        case "strokeWidth": obj.set("strokeWidth", value); break;
+        case "strokeAlign": obj.set("strokeAlign", value); break;
+        case "opacity": obj.set("opacity", value); break;
+        case "angle": obj.set("angle", value); break;
+        case "flipX": obj.set(prop, value); break
+        case "flipY": obj.set(prop, value); break;
+        case "shadowColor":
+        case "shadowBlur":
+        case "shadowOffsetX":
+        case "shadowOffsetY":
+          const shadow = obj.shadow ? new fabric.Shadow(obj.shadow) : new fabric.Shadow({ color: '#000000', blur: 0, offsetX: 0, offsetY: 0 });
+          if (prop === "shadowColor") shadow.color = value;
+          if (prop === "shadowBlur") shadow.blur = value;
+          if (prop === "shadowOffsetX") shadow.offsetX = value;
+          if (prop === "shadowOffsetY") shadow.offsetY = value;
+          obj.set("shadow", shadow);
+          break;
+        case "radius":
+          if (obj.type === "rect") (obj as fabric.Rect).set({ rx: value, ry: value });
+          if (obj.type === "circle") (obj as fabric.Circle).set({ radius: value });
+          break;
+        case "sides":
+          if (obj.type === "polygon") {
+            const poly = obj as fabric.Polygon;
+            const r = Math.min(poly.width ?? 50, poly.height ?? 50) / 2;
+            const points = Array.from({ length: value }, (_, i) => {
+              const angle = (i * 2 * Math.PI) / value - Math.PI / 2;
+              return { x: r + r * Math.cos(angle), y: r + r * Math.sin(angle) };
+            });
+            poly.set({ points });
+          }
+          break;
 
-     case "strokeStyle":
-        const styleMap: Record<string, number[]> = {
-          solid: [], dashed: [10, 5], dotted: [2, 5], "dash-dot": [15, 5, 2, 5], double: [2, 2, 10, 2], wavy: [4, 2, 1, 2],
-        };
-        obj.set("strokeDashArray", styleMap[value] ?? []);
-        break;
-    }
-    obj.setCoords();
+        case "strokeStyle":
+          const styleMap: Record<string, number[]> = {
+            solid: [], dashed: [10, 5], dotted: [2, 5], "dash-dot": [15, 5, 2, 5], double: [2, 2, 10, 2], wavy: [4, 2, 1, 2],
+          };
+          obj.set("strokeDashArray", styleMap[value] ?? []);
+          break;
+      }
+      obj.setCoords();
   };
 
-  // Clipboard & actions (same as existing)
   const handleDuplicate = async () => { if (!canvas || !selectedObject) return; const clone = await selectedObject.clone(); clone.set({ left: (selectedObject.left ?? 0) + 20, top: (selectedObject.top ?? 0) + 20 }); canvas.add(clone); canvas.setActiveObject(clone); canvas.requestRenderAll(); };
   const handleCopy = async () => { if (!selectedObject) return; const clone = await selectedObject.clone(); setClipboard(clone); };
   const handlePaste = async () => { if (!canvas || !clipboard) return; const clone = await clipboard.clone(); clone.set({ left: (clipboard.left ?? 0) + 30, top: (clipboard.top ?? 0) + 30 }); canvas.add(clone); canvas.setActiveObject(clone); canvas.requestRenderAll(); };
   const handleDelete = () => { if (!canvas || !selectedObject) return; canvas.remove(selectedObject); canvas.requestRenderAll(); };
 
-  const createGradient = (type: 'linear' | 'radial') => {
-    if (!canvas || !selectedObject) return;
-    const gradient = new fabric.Gradient({ type, gradientUnits: 'percentage', coords: { x1: 0, y1: 0, x2: 1, y2: 1 }, colorStops: [{ offset: 0, color: '#ff6b6b' }, { offset: 0.5, color: '#4ecdc4' }, { offset: 1, color: '#45b7d1' }] });
-    handleChange('fill', gradient);
-    setGradientPanelOpen(false);
+  const openColorPicker = (type: 'fill' | 'stroke' | 'shadow') => {
+    setColorPickerType(type);
+    setColorPickerOpen(true);
+  };
+  
+  const handleColorChange = (color: string | any) => {
+    if (!colorPickerType) return;
+    if (typeof color === 'object' && color.type) {
+      if (colorPickerType === 'fill') {
+        const objWidth = (selectedObject?.width ?? 100) * (selectedObject?.scaleX ?? 1);
+        const objHeight = (selectedObject?.height ?? 100) * (selectedObject?.scaleY ?? 1);
+        const gradient = new fabric.Gradient({
+          type: color.type || 'linear',
+          coords: color.type === 'radial'
+            ? { x1: objWidth / 2, y1: objHeight / 2, x2: objWidth / 2, y2: objHeight / 2, r1: 0, r2: Math.min(objWidth, objHeight) / 2 }
+            : { x1: 0, y1: 0, x2: objWidth, y2: 0 },
+          colorStops: color.colorStops || [{ offset: 0, color: '#ff6b6b' }, { offset: 1, color: '#4ecdc4' }]
+        });
+        handleChange('fill', gradient);
+      }
+    } else {
+      if (colorPickerType === 'shadow') {
+        handleChange('shadowColor', color);
+      } else {
+        handleChange(colorPickerType, color);
+      }
+    }
+  };
+
+  const applyOpacity = (value: number) => {
+    if (!selectedObject) return;
+    const opacityValue = value / 100;
+    if (selectedObject.type === "activeSelection") {
+      const objects = (selectedObject as fabric.ActiveSelection)._objects;
+      objects.forEach((obj) => obj.set("opacity", opacityValue));
+    } else {
+      selectedObject.set("opacity", opacityValue);
+    }
+    (canvas as fabric.Canvas).renderAll();
   };
 
 
-   // Apply opacity to text
-    const applyOpacity = (value: number) => {
-  if (!selectedObject) return;
-
-  if (selectedObject.type === "activeSelection") {
-    const objects = (selectedObject as fabric.ActiveSelection)._objects;
-    objects.forEach((obj) => obj.set("opacity", value / 100));
-  } else {
-    selectedObject.set("opacity", value / 100);
-  }
-
-  (canvas as fabric.Canvas).renderAll();
-
+  // 2. Layer handlers (Canvas object layer methods)
+const handleBringForward = () => {
+  if (!canvas || !selectedObject) return;
+  canvas.bringForward(selectedObject);
+  canvas.requestRenderAll();
+};
+const handleSendBackward = () => {
+  if (!canvas || !selectedObject) return;
+  canvas.sendBackwards(selectedObject);
+  canvas.requestRenderAll();
+};
+const handleBringToFront = () => {
+  if (!canvas || !selectedObject) return;
+  canvas.bringToFront(selectedObject);
+  canvas.requestRenderAll();
+};
+const handleSendToBack = () => {
+  if (!canvas || !selectedObject) return;
+  canvas.sendToBack(selectedObject);
+  canvas.requestRenderAll();
 };
 
+  // ------------------------------------------------------------------------------------------------
 
   if (!selectedObject) return null;
-return (
+  return (
     <>
-      <Box sx={{ width: '100%', overflowX: 'auto', bgcolor: '#ffffff', padding: 1, display: 'flex', gap: 0, alignItems: 'center' }}>
+      <Box 
+        sx={{ 
+         display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    padding: "6px 10px",
+                    backgroundColor: "#fff",
+                    borderRadius: "8px",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                    flexWrap: "nowrap",
+                    overflow: "hidden",
+                    whiteSpace: "nowrap",
+                    height: "60px",
+        }}
+      >
 
-        {/* Sides */}
-        {(selectedObject.type === 'polygon' || selectedObject.type === 'triangle') && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>
-              {selectedObject.type === 'polygon' ? 'Sides' : 'Triangle Corners'}
-            </Typography>
-            <StyledInput type="number" value={propsState.sides} onChange={e => handleChange("sides", Math.max(3, Number(e.target.value)))} inputProps={{ min: 3 }} />
+        {/* 1. Size & Position Group */}
+        <PropertyGroup>
+          {/* Size (W/H) */}
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            {/* W */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <Typography variant="caption" sx={{ fontSize: '10px', color: '#6b7280', mb: 0.2 }}>W</Typography>
+              <StyledInput
+                type="number"
+                value={Math.round(propsState.width)}
+                onChange={e => handleChange("width", Number(e.target.value))}
+                inputProps={{ min: 1 }}
+              />
+            </Box>
+            {/* H */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <Typography variant="caption" sx={{ fontSize: '10px', color: '#6b7280', mb: 0.2 }}>H</Typography>
+              <StyledInput
+                type="number"
+                value={Math.round(propsState.height)}
+                onChange={e => handleChange("height", Number(e.target.value))}
+                inputProps={{ min: 1 }}
+              />
+            </Box>
           </Box>
-        )}
-
-        {/* Position */}
-        {/* <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Position</Typography>
-          <Box sx={{ display: 'flex', gap: 0.5 }}>
-            <StyledInput type="number" value={Math.round(propsState.x)} onChange={e => handleChange("x", Number(e.target.value))} />
-            <StyledInput type="number" value={Math.round(propsState.y)} onChange={e => handleChange("y", Number(e.target.value))} />
-          </Box>
-        </Box> */}
-
-        {/* Size */}
-       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 140 }}>
-  
-  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-    {/* Width */}
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      <Typography variant="caption" sx={{ fontSize: '9px', color: '#6b7280', mb: 0.2 }}>
-        W
-      </Typography>
-      <StyledInput
-        type="number"
-        value={Math.round(propsState.width)}
-        onChange={e => handleChange("width", Number(e.target.value))}
-        inputProps={{ min: 1 }}
-      />
-    </Box>
-
-    {/* Height */}
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      <Typography variant="caption" sx={{ fontSize: '9px', color: '#6b7280', mb: 0.2 }}>
-        H
-      </Typography>
-      <StyledInput
-        type="number"
-        value={Math.round(propsState.height)}
-        onChange={e => handleChange("height", Number(e.target.value))}
-        inputProps={{ min: 1 }}
-      />
-    </Box>
-  </Box>
-</Box>
+        </PropertyGroup>
 
 
-        {/* Rotation */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <RotateRightIcon sx={{ fontSize: 14, color: '#6b7280', mb: 0.5 }} />
+        {/* 2. Rotation, Opacity, Sides, Radius Group */}
+        <PropertyGroup>
+
+          {/* Rotation */}
+          <Tooltip title="Rotate">
+            <CanvaIconButton>
+              {/* CUSTOM ICON IMPORT: Rotate */}
+              <CustomIcon name="Rotate" />
+            </CanvaIconButton>
+          </Tooltip>  
           <StyledInput type="number" value={Math.round(propsState.angle)} onChange={e => handleChange("angle", Number(e.target.value))} />
-        </Box>
 
-      {/* Opacity */}
-<Tooltip title="Transparency">
-  <IconButton size="small" onClick={(e) => setAnchorOpacity(e.currentTarget)}>
-    <OpacityIcon />
-  </IconButton>
-</Tooltip>
-
-<Popover
-  open={Boolean(anchorOpacity)}
-  anchorEl={anchorOpacity}
-  onClose={() => setAnchorOpacity(null)}
-  anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-  transformOrigin={{ vertical: "top", horizontal: "center" }}
-  sx={{ mt: 2 }} 
->
-  <Box
-    sx={{
-      p: 2.5,
-      width: 260,
-      borderRadius: 2,
-      boxShadow: 3,
-      bgcolor: "background.paper",
-    }}
-  >
-    <Typography sx={{ fontSize: 14, fontWeight: 500, mb: 1.5 }}>
-      Opacity
-    </Typography>
-
-    <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-      <Slider
-        value={opacity}
-        min={0}
-        max={100}
-        step={1}
-        onChange={(_, val) => {
-          const value = val as number;
-          setOpacity(value);
-          applyOpacity(value);
-        }}
-        sx={{ flex: 1 }}
-      />
-      <TextField
-        value={opacity}
-        onChange={(e) => {
-          let value = Number(e.target.value);
-          if (value > 100) value = 100;
-          if (value < 0) value = 0;
-          setOpacity(value);
-          applyOpacity(value);
-        }}
-        inputProps={{
-          min: 0,
-          max: 100,
-          type: "number",
-          style: { width: 40, fontSize: 12, textAlign: "center" },
-        }}
-        size="small"
-      />
-    </Box>
-  </Box>
-</Popover>
-
-
-                {/* Radius */}
-{(selectedObject.type === 'rect' || selectedObject.type === 'circle' || selectedObject.type === 'triangle' ||selectedObject.type==='poly') && (
-  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
-    <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Radius</Typography>
-    <Tooltip title="Radius">
-      <ColorIconButton
-        onClick={(e) => {
-          setRadiusPopoverOpen(!radiusPopoverOpen);
-          setRadiusAnchorEl(e.currentTarget);
-        }}
-        sx={{ backgroundColor: '#f3f4f6' }}
-      >
-        {/* Small circle to represent radius */}
-        <Box sx={{
-          width: 12,
-          height: 12,
-          borderRadius: '50%',
-          backgroundColor: '#6b7280',
-        }} />
-      </ColorIconButton>
-    </Tooltip>
-
-    <Popover
-      open={radiusPopoverOpen}
-      anchorEl={radiusAnchorEl}
-      onClose={() => setRadiusPopoverOpen(false)}
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      transformOrigin={{ vertical: 'top', horizontal: 'center' }}
-        sx={{ mt: 2 }} 
-    >
-      
-      <Box sx={{ p: 4, display: 'flex', flexDirection: 'column', gap: 0, minWidth: 200,
-      width: 260,
-      borderRadius: 2,
-      boxShadow: 3,
-      bgcolor: "background.paper", }}>
-        <Typography variant="caption" sx={{ fontWeight: 600, color: '#6b7280' }}>Radius</Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 , borderRadius: 3,}}>
-          <StyledSlider
-            value={propsState.radius}
-            min={0}
-            max={50}   
-            step={1}
-            onChange={(_, v) => handleChange("radius", v)}
-            sx={{ flex: 1 }}
-          />
-          <StyledInput
-            type="number"
-            value={propsState.radius}
-            onChange={e => handleChange("radius", Number(e.target.value))}
-            inputProps={{ min: 0, max: 50 }}
-            sx={{ width: 50 }}
-          />
-        </Box>
-      </Box>
-    </Popover>
-  </Box>
-)}
-
-
-
-        {/* Fill */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
-          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Fill</Typography>
-          <Tooltip title="Fill Color">
-            <ColorIconButton onClick={() => setFillPickerOpen(!fillPickerOpen)} sx={{ backgroundColor: typeof propsState.fill === 'string' ? propsState.fill : 'linear-gradient(45deg,#ff6b6b,#4ecdc4)' }}>
-              <FormatColorFillIcon sx={{ fontSize: 16 }} />
-            </ColorIconButton>
+          {/* Opacity */}
+          <Tooltip title={`Transparency: ${opacity}%`}>
+            <CanvaIconButton onClick={(e) => setAnchorOpacity(e.currentTarget)} sx={{ ml: 1 }}>
+              <OpacityIcon sx={{ fontSize: 20 }} />
+            </CanvaIconButton>
           </Tooltip>
-          {fillPickerOpen && (
-            <ColorPickerPanel>
-              <ChromePicker color={typeof propsState.fill === 'string' ? propsState.fill : '#BEF4FF'} onChangeComplete={(color: { hex: string }) => { handleChange('fill', color.hex); setFillPickerOpen(false) }} disableAlpha />
-              <Box sx={{ mt: 2, pt: 1, borderTop: '1px solid #e2e8f0' }}>
-                <Button size="small" fullWidth onClick={() => { setGradientPanelOpen(true); setFillPickerOpen(false); }}>Gradient Options</Button>
-              </Box>
-            </ColorPickerPanel>
-          )}
-          {gradientPanelOpen && (
-            <GradientPanel>
-              <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }}>Gradient Types</Typography>
-              <ButtonGroup size="small" orientation="vertical" fullWidth>
-                <Button onClick={() => createGradient('linear')}>Linear Gradient</Button>
-                <Button onClick={() => createGradient('radial')}>Radial Gradient</Button>
-              </ButtonGroup>
-            </GradientPanel>
-          )}
-        </Box>
 
-        {/* Stroke */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
-          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Stroke</Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Tooltip title="Stroke Color">
-              <ColorIconButton onClick={() => setStrokePickerOpen(!strokePickerOpen)} sx={{ backgroundColor: propsState.stroke }}>
-                <BorderColorIcon sx={{ fontSize: 16 }} />
-              </ColorIconButton>
-            </Tooltip>
-            <StyledInput type="number" value={propsState.strokeWidth} onChange={e => handleChange("strokeWidth", Number(e.target.value))} />
-          </Box>
-          {strokePickerOpen && (
-            <ColorPickerPanel>
-              <ChromePicker color={propsState.stroke} onChangeComplete={(color: { hex: string }) => { handleChange('stroke', color.hex); setStrokePickerOpen(false) }} disableAlpha />
-            </ColorPickerPanel>
+          {/* Radius/Sides */}
+          {(selectedObject.type === 'rect' || selectedObject.type === 'circle' || selectedObject.type === 'polygon' || selectedObject.type === 'triangle') && (
+            <Box sx={{ display: 'flex', alignItems: 'center', ml: 1, gap: 0.5 }}>
+              <Tooltip title={selectedObject.type === 'polygon' ? 'Sides' : 'Corner Rounding'}>
+                <CanvaIconButton
+                  isActive={radiusPopoverOpen || propsState.radius > 0}
+                  onClick={(e) => {
+                    setRadiusPopoverOpen(!radiusPopoverOpen);
+                    setRadiusAnchorEl(e.currentTarget);
+                  }}
+                >
+                  <CustomIcon name="CornerRounding" />
+                </CanvaIconButton>
+              </Tooltip>
+
+              {(selectedObject.type === 'polygon' || selectedObject.type === 'triangle') && (
+                <StyledInput 
+                  type="number" 
+                  value={propsState.sides} 
+                  onChange={e => handleChange("sides", Math.max(3, Number(e.target.value)))} 
+                  inputProps={{ min: 3 }} 
+                />
+              )}
+            </Box>
           )}
-        </Box>
+        </PropertyGroup>
 
-        {/* Stroke Style */}
-        <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <Typography variant="caption" sx={{ mb: 0.5, fontSize: 10, color: "#6b7280" }}>Stroke Style</Typography>
-          <Select value={propsState.strokeStyle ?? "solid"} size="small" onChange={(e) => handleChange("strokeStyle", e.target.value)} sx={{ width: 100 }}>
-            {strokeStyles.map((style) => (
-              <MenuItem key={style.key} value={style.key}>
-                <Box sx={{ display: "flex", alignItems: "center" }}>
-                  <svg width="60" height="10">
-                    {style.key === "wavy" ? (
-                      <path d="M0 5 Q2 0, 4 5 T8 5 T12 5 T16 5 T20 5 T24 5 T28 5 T32 5 T36 5 T40 5 T44 5 T48 5 T52 5 T56 5 T60 5" stroke="black" strokeWidth="2" fill="none" />
-                    ) : (
-                      <line x1={0} y1={5} x2={60} y2={5} stroke="black" strokeWidth={2} strokeDasharray={style.dash.join(",")} />
-                    )}
-                  </svg>
-                </Box>
-              </MenuItem>
-            ))}
-          </Select>
-        </Box>
 
-        {/* Flip */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Flip</Typography>
-          <Box sx={{ display: 'flex', gap: 0.5 }}>
-            <Tooltip title="Flip Horizontal">
-              <ActionButton onClick={() => handleChange("flipX", !propsState.flipX)} sx={{ backgroundColor: propsState.flipX ? '#e0e7ff' : '#f8fafc', color: propsState.flipX ? '#4338ca' : '#6b7280' }}><FlipIcon sx={{ transform: "scaleX(-1)", fontSize: 16 }} /></ActionButton>
-            </Tooltip>
-            <Tooltip title="Flip Vertical">
-              <ActionButton onClick={() => handleChange("flipY", !propsState.flipY)} sx={{ backgroundColor: propsState.flipY ? '#e0e7ff' : '#f8fafc', color: propsState.flipY ? '#4338ca' : '#6b7280' }}><FlipIcon sx={{ fontSize: 16 }} /></ActionButton>
+        {/* 3. Color & Border Group */}
+        <PropertyGroup>
+          {/* Fill */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mr: 1 }}>
+            <Tooltip title="Fill Color">
+              <CanvaIconButton
+                onClick={() => openColorPicker('fill')}
+                isActive={typeof propsState.fill !== 'string' || propsState.fill !== '#BEF4FF'} // Simple active check
+                sx={{
+                  backgroundColor: typeof propsState.fill === 'string' ? propsState.fill : '#f3f4f6', 
+                  border: "2px solid #e2e8f0",
+                  "&:hover": { borderColor: "#9333ea" }
+                }}
+              >
+                {/* CUSTOM ICON IMPORT: FillColor */}
+                <CustomIcon name="FillColor" style={{ color: typeof propsState.fill === 'string' ? 'white' : '#6b7280', mixBlendMode: 'difference' }} />
+              </CanvaIconButton>
             </Tooltip>
           </Box>
-        </Box>
+          
+          {/* Stroke/Border */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Tooltip title="Border Color">
+              <CanvaIconButton
+                onClick={() => openColorPicker('stroke')}
+                isActive={propsState.strokeWidth > 0}
+                sx={{
+                  backgroundColor: propsState.stroke,
+                  border: "2px solid #e2e8f0",
+                  "&:hover": { borderColor: "#9333ea" }
+                }}
+              >
+                {/* CUSTOM ICON IMPORT: BorderColor */}
+                <CustomIcon name="BorderColor" style={{ color: 'white', mixBlendMode: 'difference' }} />
+              </CanvaIconButton>
+            </Tooltip>
+            
+            <StyledInput
+              type="number"
+              value={propsState.strokeWidth}
+              onChange={e => handleChange("strokeWidth", Number(e.target.value))}
+              sx={{ width: 40 }}
+            />
+          </Box>
 
-        {/* Animation Button */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Animate</Typography>
-          <Tooltip title="Add Animation">
-            <ActionButton 
-              onClick={() => setShowAnimationPanel(!showAnimationPanel)}
-              sx={{ 
-                backgroundColor: showAnimationPanel ? '#f0f4ff' : '#f8fafc',
-                color: showAnimationPanel ? '#7b68ee' : '#6b7280',
-                borderColor: showAnimationPanel ? '#7b68ee' : '#e2e8f0',
-              }}
+          {/* Stroke Style */}
+          <Box sx={{ display: "flex", alignItems: "center", ml: 1 }}>
+            <Tooltip title="Border Style">
+              <Select 
+                value={propsState.strokeStyle ?? "solid"} 
+                size="small" 
+                onChange={(e) => handleChange("strokeStyle", e.target.value)} 
+                sx={{ 
+                  width: 80, 
+                  height: 30,
+                  fontSize: 12,
+                  '.MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#a0aec0' },
+                  '.MuiSelect-select': { py: 0.5, px: 1 },
+                }}
+              >
+                {strokeStyles.map((style) => (
+                  <MenuItem key={style.key} value={style.key}>
+                    <Box sx={{ display: "flex", alignItems: "center", height: '10px' }}>
+                      <svg width="100" height="10">
+                        {style.key === "wavy" ? (
+                          <path d="M0 5 Q3 2, 6 5 T12 5 T18 5 T24 5 T30 5 T36 5 T42 5 T48 5 T54 5 T60 5" stroke="black" strokeWidth="1.5" fill="none" />
+                        ) : (
+                          <line x1={0} y1={5} x2={60} y2={5} stroke="black" strokeWidth={2} strokeDasharray={style.dash.join(",")} />
+                        )}
+                      </svg>
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </Tooltip>
+          </Box>
+        </PropertyGroup>
+
+
+        {/* 4. Effects (Shadow, Flip, Animate) Group */}
+        <PropertyGroup>
+          
+          {/* Flip */}
+          <Tooltip title="Flip Horizontal">
+            <CanvaIconButton isActive={propsState.flipX} onClick={() => handleChange("flipX", !propsState.flipX)}>
+              {/* CUSTOM ICON IMPORT: FlipHorizontal (using MUI FlipIcon as placeholder) */}
+              <CustomIcon name="FlipHorizontal" />
+            </CanvaIconButton>
+          </Tooltip>
+          <Tooltip title="Flip Vertical">
+            <CanvaIconButton isActive={propsState.flipY} onClick={() => handleChange("flipY", !propsState.flipY)}>
+              {/* CUSTOM ICON IMPORT: FlipVertical (using MUI FlipIcon as placeholder) */}
+              <CustomIcon name="FlipVertical" />
+            </CanvaIconButton>
+          </Tooltip>
+
+          {/* Shadow Button */}
+          <Tooltip title="Shadow">
+            <CanvaIconButton 
+              onClick={(e) => setAnchorEl(e.currentTarget)}
+              isActive={propsState.shadowBlur > 0 || propsState.shadowOffsetX !== 0 || propsState.shadowOffsetY !== 0}
             >
-              <AnimationIcon sx={{ fontSize: 16 }} />
-            </ActionButton>
+              {/* CUSTOM ICON IMPORT: ShadowEffect */}
+              <CustomIcon name="ShadowEffect" />
+            </CanvaIconButton>
           </Tooltip>
-        </Box>
 
-      
+          {/* Animate */}
+          <Tooltip title="Animate">
+            <CanvaIconButton
+              onClick={() => setShowAnimationPanel(!showAnimationPanel)}
+              isActive={showAnimationPanel}
+            >
+              {/* CUSTOM ICON IMPORT: Animate (using MUI AnimationIcon as placeholder) */}
+              <CustomIcon name="Animate" />
+            </CanvaIconButton>
+          </Tooltip>
+        </PropertyGroup>
 
-{/* Shadow */}
-<Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Shadow</Typography>
 
-  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-    <Tooltip title="Shadow Color">
-      <ColorIconButton
-        onClick={(e) => setAnchorEl(e.currentTarget)}
-        sx={{ backgroundColor: propsState.shadowColor, opacity: propsState.shadowBlur > 0 ? 1 : 0.5 }}
+        {/* 5. Actions Group (Copy, Paste, Duplicate, Delete) */}
+        <PropertyGroup sx={{ borderRight: 'none', marginRight: 0 }}>
+          <Tooltip title="Duplicate">
+            <CanvaIconButton onClick={handleDuplicate}>
+              <DuplicateIcon sx={{ fontSize: 16 }} />
+            </CanvaIconButton>
+          </Tooltip>
+          
+          <Tooltip title="Copy">
+            <CanvaIconButton onClick={handleCopy}><ContentCopy sx={{ fontSize: 16 }} /></CanvaIconButton>
+          </Tooltip>
+          <Tooltip title="Paste">
+            <CanvaIconButton onClick={handlePaste}><ContentPaste sx={{ fontSize: 16 }} /></CanvaIconButton>
+          </Tooltip>
+          
+          <Tooltip title="Delete">
+            <CanvaIconButton onClick={handleDelete} sx={{ color: '#dc2626', '&:hover': { color: '#dc2626' } }}>
+              <Delete sx={{ fontSize: 16 }} />
+            </CanvaIconButton>
+          </Tooltip>
+
+        </PropertyGroup>
+
+      </Box>
+
+      {/* --- POPUP PANELS (Same as before) --- */}
+
+      {/* Opacity Popover */}
+      <Popover
+        open={Boolean(anchorOpacity)}
+        anchorEl={anchorOpacity}
+        onClose={() => setAnchorOpacity(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        transformOrigin={{ vertical: "top", horizontal: "center" }}
+        sx={{ mt: 1 }}
       >
-        <ReplayIcon sx={{ fontSize: 16 }} />
-      </ColorIconButton>
-    </Tooltip>
-    <StyledSlider
-      value={propsState.shadowBlur}
-      min={0}
-      max={20}
-      step={1}
-      onChange={(_, v) => handleChange("shadowBlur", v)}
-    />
-  </Box>
+        <Box sx={{ p: 2, width: 200, borderRadius: 2, boxShadow: 3, bgcolor: "background.paper", }}>
+          <Typography sx={{ fontSize: 12, fontWeight: 500, mb: 1 }}>Opacity</Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Slider
+              value={opacity}
+              min={0} max={100} step={1}
+              onChange={(_, val) => {
+                const value = val as number;
+                setOpacity(value);
+                applyOpacity(value);
+              }}
+              sx={{ flex: 1, color: '#9333ea' }}
+            />
+            <StyledInput
+              value={opacity}
+              onChange={(e) => {
+                let value = Number(e.target.value);
+                if (value > 100) value = 100;
+                if (value < 0) value = 0;
+                setOpacity(value);
+                applyOpacity(value);
+              }}
+              inputProps={{ min: 0, max: 100, type: "number", style: { width: 30, fontSize: 12, textAlign: "center" } }}
+              size="small"
+              sx={{ width: 40 }}
+            />
+          </Box>
+        </Box>
+      </Popover>
 
-  {/* Popover for Shadow Color */}
-  <Popover
-    open={Boolean(anchorEl)}
-    anchorEl={anchorEl}
-    onClose={() => setAnchorEl(null)}
-    anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-    transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-  >
-    <Box sx={{ p: 1 }}>
-      <ChromePicker
-        color={propsState.shadowColor}
-        onChangeComplete={(color: { hex: string }) => {
-          handleChange('shadowColor', color.hex);
-          setAnchorEl(null);
+      {/* Radius Popover */}
+      <Popover
+        open={radiusPopoverOpen}
+        anchorEl={radiusAnchorEl}
+        onClose={() => setRadiusPopoverOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'center' }}
+        sx={{ mt: 1 }}
+      >
+        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 200, borderRadius: 2, boxShadow: 3, bgcolor: "background.paper" }}>
+          <Typography variant="caption" sx={{ fontWeight: 600, color: '#6b7280' }}>Corner Rounding</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Slider
+              value={propsState.radius}
+              min={0} max={50} step={1}
+              onChange={(_, v) => handleChange("radius", v)}
+              sx={{ flex: 1, color: '#9333ea' }}
+            />
+            <StyledInput
+              type="number"
+              value={propsState.radius}
+              onChange={e => handleChange("radius", Number(e.target.value))}
+              inputProps={{ min: 0, max: 50 }}
+              sx={{ width: 40 }}
+            />
+          </Box>
+        </Box>
+      </Popover>
+
+      {/* Shadow Popover */}
+      <Popover
+        open={Boolean(anchorEl)}
+        anchorEl={anchorEl}
+        onClose={() => setAnchorEl(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        sx={{ mt: 1 }}
+      >
+        <Box sx={{ p: 2 }}>
+          <ChromePicker
+            color={propsState.shadowColor}
+            onChangeComplete={(color: { hex: string }) => {
+              handleChange('shadowColor', color.hex);
+            }}
+            disableAlpha
+          />
+          <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Typography variant="caption" sx={{ fontWeight: 600, mb: 1 }}>Shadow Blur</Typography>
+            <Slider
+              value={propsState.shadowBlur}
+              min={0} max={20} step={1}
+              onChange={(_, v) => handleChange("shadowBlur", v)}
+              sx={{ flex: 1, color: '#9333ea' }}
+            />
+
+            <Typography variant="caption" sx={{ fontWeight: 600, mt: 1 }}>Shadow Offset (X/Y)</Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="caption" sx={{ fontSize: '10px' }}>X</Typography>
+                <Slider
+                  value={propsState.shadowOffsetX}
+                  min={-20} max={20} step={1}
+                  onChange={(_, v) => handleChange("shadowOffsetX", v)}
+                  sx={{ width: 80, color: '#9333ea' }}
+                />
+              </Box>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="caption" sx={{ fontSize: '10px' }}>Y</Typography>
+                <Slider
+                  value={propsState.shadowOffsetY}
+                  min={-20} max={20} step={1}
+                  onChange={(_, v) => handleChange("shadowOffsetY", v)}
+                  sx={{ width: 80, color: '#9333ea' }}
+                />
+              </Box>
+            </Box>
+          </Box>
+
+          {/* Reset Shadow Button */}
+          {(propsState.shadowBlur > 0 || propsState.shadowOffsetX !== 0 || propsState.shadowOffsetY !== 0) && (
+            <Button
+              onClick={() => { handleChange("shadowBlur", 0); handleChange("shadowOffsetX", 0); handleChange("shadowOffsetY", 0); setAnchorEl(null); }}
+              size="small"
+              startIcon={<ReplayIcon />}
+              sx={{ mt: 2, color: '#4338ca' }}
+            >
+              Remove Shadow
+            </Button>
+          )}
+        </Box>
+      </Popover>
+
+
+      {/* Canva Color Picker */}
+      <ColorPicker
+        isOpen={colorPickerOpen}
+        onClose={() => {
+          setColorPickerOpen(false);
+          setColorPickerType(null);
         }}
-        disableAlpha
+        currentColor={
+          colorPickerType === 'fill' ? propsState.fill :
+            colorPickerType === 'stroke' ? propsState.stroke :
+              propsState.shadowColor
+        }
+        onColorChange={handleColorChange}
+        title={
+          colorPickerType === 'fill' ? 'Fill Color' :
+            colorPickerType === 'stroke' ? 'Stroke Color' :
+              'Shadow Color'
+        }
+        allowGradients={colorPickerType === 'fill'}
       />
-      <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Typography variant="caption" sx={{ fontWeight: 600 }}>Shadow Offset</Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="caption" sx={{ fontSize: '10px' }}>X</Typography>
-            <StyledSlider
-              value={propsState.shadowOffsetX}
-              min={-20}
-              max={20}
-              step={1}
-              onChange={(_, v) => handleChange("shadowOffsetX", v)}
-              sx={{ width: 80 }}
-            />
-          </Box>
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="caption" sx={{ fontSize: '10px' }}>Y</Typography>
-            <StyledSlider
-              value={propsState.shadowOffsetY}
-              min={-20}
-              max={20}
-              step={1}
-              onChange={(_, v) => handleChange("shadowOffsetY", v)}
-              sx={{ width: 80 }}
-            />
-          </Box>
-        </Box>
-      </Box>
-    </Box>
-  </Popover>
-</Box>
-
-
-        {/* Actions */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Actions</Typography>
-          <Box sx={{ display: 'flex', gap: 0.5 }}>
-            <Tooltip title="Copy"><ActionButton onClick={handleCopy}><ContentCopy sx={{ fontSize: 16 }} /></ActionButton></Tooltip>
-            <Tooltip title="Paste"><ActionButton onClick={handlePaste}><ContentPaste sx={{ fontSize: 16 }} /></ActionButton></Tooltip>
-            <Tooltip title="Duplicate"><ActionButton onClick={handleDuplicate}><DuplicateIcon sx={{ fontSize: 16 }} /></ActionButton></Tooltip>
-            <Tooltip title="Delete"><ActionButton onClick={handleDelete} sx={{ color: '#dc2626' }}><Delete sx={{ fontSize: 16 }} /></ActionButton></Tooltip>
-          </Box>
-        </Box>
-
-        {/* Reset Shadow */}
-        {(propsState.shadowBlur > 0 || propsState.shadowOffsetX !== 0 || propsState.shadowOffsetY !== 0) && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <Typography variant="caption" sx={{ mb: 0.5, fontSize: '10px', color: '#6b7280' }}>Reset</Typography>
-            <Tooltip title="Reset Shadow">
-              <ActionButton onClick={() => { handleChange("shadowBlur", 0); handleChange("shadowOffsetX", 0); handleChange("shadowOffsetY", 0); }}>
-                <ReplayIcon sx={{ fontSize: 16 }} />
-              </ActionButton>
-            </Tooltip>
-          </Box>
-        )}
-      </Box>
 
       {/* Animation Panel */}
       {showAnimationPanel && (

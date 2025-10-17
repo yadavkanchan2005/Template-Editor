@@ -57,11 +57,14 @@ const MiniCanva: React.FC<Props> = ({ action, onCanvasReady, onObjectSelected, s
     console.log("Adding element:", el.type, el);
 
     try {
-      switch (el.type) {
+      const typeLower = (el.type || "").toLowerCase();
+      switch (typeLower) {
         case "text":
+        case "textbox":
+        case "i-text":
           obj = new Textbox(el.text || "Text", {
-            left: el.x || 50,
-            top: el.y || 50,
+            left: el.x ?? el.left ?? 50,
+            top: el.y ?? el.top ?? 50,
             fontSize: el.fontSize || 24,
             fill: el.fill || "#000000",
             fontFamily: el.fontFamily || "Arial",
@@ -80,14 +83,16 @@ const MiniCanva: React.FC<Props> = ({ action, onCanvasReady, onObjectSelected, s
             const img = await fabric.Image.fromURL(imgSrc, { crossOrigin: "anonymous" });
 
             if (img && img.width && img.height) {
-              const targetWidth = el.width || 200;
-              const targetHeight = el.height || 200;
+              const hasExplicitSize = typeof el.width === "number" && typeof el.height === "number";
+              const scaleX = hasExplicitSize ? el.width / img.width : (el.scaleX || 1);
+              const scaleY = hasExplicitSize ? el.height / img.height : (el.scaleY || 1);
 
               img.set({
-                left: el.x || 50,
-                top: el.y || 50,
-                scaleX: targetWidth / img.width,
-                scaleY: targetHeight / img.height,
+                left: el.x ?? el.left ?? 50,
+                top: el.y ?? el.top ?? 50,
+                scaleX,
+                scaleY,
+                crossOrigin: "anonymous",
               });
 
               obj = img;
@@ -96,9 +101,9 @@ const MiniCanva: React.FC<Props> = ({ action, onCanvasReady, onObjectSelected, s
           } catch (imgError) {
             console.error(" Image load failed:", imgError);
             // Fallback to colored rectangle
-            obj = new Rect({
-              left: el.x || 50,
-              top: el.y || 50,
+            const rect = new Rect({
+              left: el.x ?? el.left ?? 50,
+              top: el.y ?? el.top ?? 50,
               width: el.width || 200,
               height: el.height || 200,
               fill: "#e5e7eb",
@@ -107,21 +112,35 @@ const MiniCanva: React.FC<Props> = ({ action, onCanvasReady, onObjectSelected, s
               strokeDashArray: [10, 5],
             });
 
-            // Add text label
             const label = new Textbox("Image\nPlaceholder", {
               fontSize: 14,
               fill: "#6b7280",
               textAlign: "center",
               width: (el.width || 200) - 20,
+              originX: "center",
+              originY: "center",
             });
 
-            const group = new Group([obj, label], {
-              left: el.x || 50,
-              top: el.y || 50,
+            label.set({ left: (el.width || 200) / 2, top: (el.height || 200) / 2 });
+
+            const group = new Group([rect, label], {
+              left: el.x ?? el.left ?? 50,
+              top: el.y ?? el.top ?? 50,
             });
 
             obj = group;
           }
+          break;
+
+        case "circle":
+          obj = new Circle({
+            left: el.x ?? el.left ?? 50,
+            top: el.y ?? el.top ?? 50,
+            radius: el.radius || 50,
+            fill: el.fill || "#3b82f6",
+            stroke: el.stroke || undefined,
+            strokeWidth: el.strokeWidth || 0,
+          });
           break;
 
 case "button":
@@ -188,8 +207,8 @@ case "button":
           console.warn("Unknown element type:", el.type);
           // Create a placeholder for unknown types
           obj = new Rect({
-            left: el.x || 50,
-            top: el.y || 50,
+            left: el.x ?? el.left ?? 50,
+            top: el.y ?? el.top ?? 50,
             width: 100,
             height: 100,
             fill: "#f3f4f6",
@@ -468,6 +487,12 @@ case "button":
       backgroundColor: "#ffffff",
       preserveObjectStacking: true,
       subTargetCheck: true,
+      selection: true,
+  borderColor: 'transparent',
+  borderScaleFactor: 0,
+  selectionColor: 'rgba(100, 200, 255, 0.3)',
+  selectionBorderColor: '#00c4cc',
+  selectionLineWidth: 2,
     });
 
 
@@ -503,8 +528,6 @@ case "button":
     canvas.on("selection:cleared", () => {
       setSelectedObject?.(null);
     });
-
-
 
 
     // store object state when user presses mouse down (before transform)
@@ -660,21 +683,54 @@ setTimeout(playAllAnimations, 500);
 
       case "LOAD_TEMPLATE": {
         const { template, snapshot, prevSize, prevBg } = payload;
-        const elements = template.elements;
+        // Prefer full Fabric JSON if available for pixel-perfect load
+        const fabricJSON = (template as any)?.fabricJSON || (Array.isArray((template as any)?.elements)
+          ? { objects: (template as any).elements, background: (template as any).background }
+          : undefined);
+        if (fabricJSON && typeof fabricJSON === "object") {
+          const cmd: Command = {
+            do: async () => {
+              try {
+                await restoreFromJSON(canvas, fabricJSON);
+                canvas.requestRenderAll();
+              } catch (error) {
+                console.error("Fabric JSON load failed, falling back:", error);
+              }
+            },
+            undo: async () => {
+              try {
+                await restoreFromJSON(canvas, snapshot);
+                if (prevSize) {
+                  canvas.setDimensions(prevSize);
+                  canvas.backgroundColor = prevBg || "#ffffff";
+                }
+                canvas.requestRenderAll();
+              } catch (error) {
+                console.error("Template undo failed:", error);
+              }
+            },
+          };
+          manager.execute(cmd);
+          break;
+        }
+
+        // Fallback: build from simplified elements array
+        const elements = Array.isArray((template as any)?.elements)
+          ? (template as any).elements
+          : Array.isArray((template as any)?.elements?.objects)
+          ? (template as any).elements.objects
+          : [];
 
         const cmd: Command = {
           do: async () => {
             try {
-              // Clear canvas
               canvas.clear();
               canvas.backgroundColor = "#ffffff";
-              // Load elements sequentially
-              const loadedObjects = [];
-              for (const el of elements) {
-                const obj = await addElementToCanvas(el, canvas);
-                if (obj) loadedObjects.push(obj);
+              if (elements.length) {
+                for (const el of elements) {
+                  await addElementToCanvas(el, canvas);
+                }
               }
-
               canvas.requestRenderAll();
             } catch (error) {
               console.error("Template loading failed:", error);
@@ -693,7 +749,6 @@ setTimeout(playAllAnimations, 500);
             }
           },
         };
-
         manager.execute(cmd);
         break;
       }
@@ -710,9 +765,9 @@ setTimeout(playAllAnimations, 500);
         const t = new Textbox("New Text", { left: 100, top: 100, fontSize: 24, fill: "#000" });
         const cmd: Command = {
           do: () => {
-            canvas.add(t);
-            canvas.setActiveObject(t);
-            canvas.requestRenderAll();
+        canvas.add(t);
+        canvas.setActiveObject(t);
+        canvas.requestRenderAll();
           },
           undo: () => {
             canvas.remove(t);
@@ -731,30 +786,30 @@ setTimeout(playAllAnimations, 500);
 
         // 1) Normal shapes
           if (typeof payload === "string" && !payload.startsWith("http") && !payload.startsWith("/")) {
-          switch (payload) {
-            case "rect":
+        switch (payload) {
+          case "rect":
               obj = new fabric.Rect({
                 left: 150, top: 150,
                 width: 120, height: 80,
                 fill: "lightblue"
               });
-              break;
+            break;
 
-            case "circle":
+          case "circle":
               obj = new fabric.Circle({
                 left: 200, top: 200,
                 radius: 50,
                 fill: "lightgreen"
               });
-              break;
+            break;
 
-            case "triangle":
+          case "triangle":
               obj = new fabric.Triangle({
                 left: 250, top: 250,
                 width: 100, height: 100,
                 fill: "lightpink"
               });
-              break;
+            break;
 
             case "diamond":
               obj = new fabric.Polygon(
@@ -766,18 +821,18 @@ setTimeout(playAllAnimations, 500);
                 ],
                 { left: 300, top: 300, fill: "purple" }
               );
-              break;
+            break;
 
-            case "star": {
-              const pts = Array.from({ length: 5 }, (_, i) => {
-                const a = (i * 72 - 90) * (Math.PI / 180);
-                return { x: 50 * Math.cos(a), y: 50 * Math.sin(a) };
-              });
+          case "star": {
+            const pts = Array.from({ length: 5 }, (_, i) => {
+              const a = (i * 72 - 90) * (Math.PI / 180);
+              return { x: 50 * Math.cos(a), y: 50 * Math.sin(a) };
+            });
               obj = new fabric.Polygon(pts, {
                 left: 300, top: 300, fill: "yellow"
               });
-              break;
-            }
+            break;
+          }
 
             case "heart":
               obj = new fabric.Path(
@@ -787,8 +842,8 @@ setTimeout(playAllAnimations, 500);
                 "C19.58,3,22,5.42,22,8.5c0,3.78-3.4,6.86-8.55,11.54" +
                 "L12,21.35z",
                 { left: 300, top: 300, fill: "red", scaleX: 3, scaleY: 3 }
-              );
-              break;
+            );
+            break;
 
 
           }
@@ -833,9 +888,6 @@ setTimeout(playAllAnimations, 500);
             }
           });
         }
-
-        // 3) SVG
-
         // 3) SVG (import and add each path as an individual object)
         else if (payload && typeof payload === "object" && payload.type === "svg") {
           (async () => {
@@ -857,9 +909,9 @@ setTimeout(playAllAnimations, 500);
 
                   const cmd: Command = {
                     do: () => {
-                      canvas.add(obj);
-                      canvas.setActiveObject(obj);
-                      canvas.requestRenderAll();
+          canvas.add(obj);
+          canvas.setActiveObject(obj);
+          canvas.requestRenderAll();
                     },
                     undo: () => {
                       canvas.remove(obj);
@@ -874,11 +926,21 @@ setTimeout(playAllAnimations, 500);
         }
 
 
-
         // 4) Images
         else if (typeof payload === "string" &&
           (payload.startsWith("http") || payload.startsWith("/"))) {
-          fabric.Image.fromURL(payload, { crossOrigin: "anonymous" })
+          
+          //  Fix: Always use full backend URL for local images
+          const getImageUrl = (url: string) => {
+            if (url.startsWith("http")) return url;
+            // If starts with /uploads/media, prefix backend port
+            if (url.startsWith("/uploads/media")) {
+              return `http://localhost:4000${url}`;
+            }
+            return url;
+          };
+
+          fabric.Image.fromURL(getImageUrl(payload), { crossOrigin: "anonymous" })
             .then((img) => {
               if (img && canvas && manager) {
                 img.scaleToWidth(200);
@@ -907,8 +969,7 @@ setTimeout(playAllAnimations, 500);
       }
 
 
-
-      // DELETE selected
+     // DELETE selected
       case "DELETE": {
         const active = canvas.getActiveObjects();
         if (active?.length) {
@@ -918,8 +979,8 @@ setTimeout(playAllAnimations, 500);
             const cmd: Command = {
               do: () => {
                 canvas.remove(obj);
-                canvas.discardActiveObject();
-                canvas.requestRenderAll();
+          canvas.discardActiveObject();
+          canvas.requestRenderAll();
               },
               undo: () => {
                 const objs = canvas.getObjects();
@@ -940,9 +1001,9 @@ setTimeout(playAllAnimations, 500);
         const snapshot = canvas.toJSON();
         const cmd: Command = {
           do: () => {
-            canvas.clear();
-            canvas.backgroundColor = "#ffffff";
-            canvas.requestRenderAll();
+        canvas.clear();
+        canvas.backgroundColor = "#ffffff";
+        canvas.requestRenderAll();
           },
           undo: () => {
             restoreFromJSON(canvas, snapshot);
@@ -1004,9 +1065,9 @@ setTimeout(playAllAnimations, 500);
       }
 
       // SEND BACKWARD
-      case "SEND_BACKWARD": {
-        const active = canvas.getActiveObject();
-        if (active) {
+case "SEND_BACKWARD": {
+  const active = canvas.getActiveObject();
+  if (active) {
           const objects = canvas.getObjects();
           const prevIndex = objects.indexOf(active);
           const newIndex = Math.max(prevIndex - 1, 0);
@@ -1023,14 +1084,14 @@ setTimeout(playAllAnimations, 500);
           };
 
           manager.execute(cmd);
-        }
-        break;
-      }
+  }
+  break;
+}
 
       // BRING TO FRONT
-      case "BRING_TO_FRONT": {
-        const active = canvas.getActiveObject();
-        if (active) {
+case "BRING_TO_FRONT": {
+  const active = canvas.getActiveObject();
+  if (active) {
           const objects = canvas.getObjects();
           const prevIndex = objects.indexOf(active);
           const newIndex = objects.length - 1;
@@ -1047,14 +1108,14 @@ setTimeout(playAllAnimations, 500);
           };
 
           manager.execute(cmd);
-        }
-        break;
-      }
+  }
+  break;
+}
 
       // SEND TO BACK
-      case "SEND_TO_BACK": {
-        const active = canvas.getActiveObject();
-        if (active) {
+case "SEND_TO_BACK": {
+  const active = canvas.getActiveObject();
+  if (active) {
           const objects = canvas.getObjects();
           const prevIndex = objects.indexOf(active);
           const newIndex = 0;
@@ -1071,9 +1132,9 @@ setTimeout(playAllAnimations, 500);
           };
 
           manager.execute(cmd);
-        }
-        break;
-      }
+  }
+  break;
+}
 
       // COLOR / STROKE / FONT / FONT SIZE
       case "CHANGE_COLOR": {
@@ -1087,7 +1148,7 @@ setTimeout(playAllAnimations, 500);
             },
             undo: () => {
               active.set({ fill: prev });
-              canvas.requestRenderAll();
+          canvas.requestRenderAll();
             },
           };
           manager.execute(cmd);
@@ -1106,7 +1167,7 @@ setTimeout(playAllAnimations, 500);
             },
             undo: () => {
               active.set({ stroke: prev });
-              canvas.requestRenderAll();
+          canvas.requestRenderAll();
             },
           };
           manager.execute(cmd);
@@ -1125,7 +1186,7 @@ setTimeout(playAllAnimations, 500);
             },
             undo: () => {
               active.set({ fontFamily: prev });
-              canvas.requestRenderAll();
+          canvas.requestRenderAll();
             },
           };
           manager.execute(cmd);
@@ -1144,7 +1205,7 @@ setTimeout(playAllAnimations, 500);
             },
             undo: () => {
               active.set({ fontSize: prev });
-              canvas.requestRenderAll();
+          canvas.requestRenderAll();
             },
           };
           manager.execute(cmd);
@@ -1163,9 +1224,9 @@ setTimeout(playAllAnimations, 500);
             img.scaleToWidth(300);
             const cmd: Command = {
               do: () => {
-                canvas.add(img);
-                canvas.setActiveObject(img);
-                canvas.requestRenderAll();
+            canvas.add(img);
+            canvas.setActiveObject(img);
+            canvas.requestRenderAll();
               },
               undo: () => {
                 canvas.remove(img);
@@ -1193,17 +1254,17 @@ setTimeout(playAllAnimations, 500);
       //     break;
       // }
       // EXPORT
-      case "EXPORT": {
+    case "EXPORT": {
         if (!payload) return;
 
         if (payload === "png" || payload === "jpg") {
-          const dataUrl = canvas.toDataURL({
+  const dataUrl = canvas.toDataURL({
             format: payload,
-            quality: 1,
+    quality: 1,
             multiplier: 2, // High resolution
-          });
-          const a = document.createElement("a");
-          a.href = dataUrl;
+  });
+  const a = document.createElement("a");
+  a.href = dataUrl;
           a.download = `canvas.${payload}`;
           a.click();
         }
@@ -1215,7 +1276,7 @@ setTimeout(playAllAnimations, 500);
           const a = document.createElement("a");
           a.href = url;
           a.download = "canvas.svg";
-          a.click();
+  a.click();
           URL.revokeObjectURL(url);
         }
 
@@ -1228,8 +1289,8 @@ setTimeout(playAllAnimations, 500);
           });
         }
 
-        break;
-      }
+  break;
+}
 
 
 

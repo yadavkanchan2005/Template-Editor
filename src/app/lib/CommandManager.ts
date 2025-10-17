@@ -33,7 +33,23 @@ export default class CommandManager {
       this.undoStack.push(cmd);
     }
   }
+   // ✅ Add save method for CanvasEditor compatibility
+  save() {
+    // You can push a snapshot command or just a canvas JSON for simple tracking
+    const json = this.canvas.toJSON();
+    this.undoStack.push({
+      do: () => {},
+      undo: () => {
+        this.canvas.loadFromJSON(json, () => {
+          this.canvas.renderAll();
+        });
+      }
+    });
+    this.redoStack = [];
+  }
 }
+
+
 
 
 
