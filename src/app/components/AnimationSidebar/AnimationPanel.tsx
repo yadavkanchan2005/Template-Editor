@@ -185,19 +185,19 @@ const animations = [
   { id: "sway", name: "Sway", icon: "⤾" },
 { id: "bounceUp", name: "Bounce Up", icon: "⥣" },
 // New animations from screenshot
-  { id: "drift", name: "Drift", icon: "⇄" },
-  { id: "tectonic", name: "Tectonic", icon: "⇆" },
-  { id: "tumble", name: "Tumble", icon: "⟳" },
-  { id: "neon", name: "Neon", icon: "💡" },
-  { id: "scrapbook", name: "Scrapbook", icon: "📄" },
-  { id: "stomp", name: "Stomp", icon: "⬛" },
-  { id: "photoFlow", name: "Photo Flow", icon: "📷↓" },
-  { id: "photoRise", name: "Photo Rise", icon: "📷↑" },
-  { id: "photoZoom", name: "Photo Zoom", icon: "🔍" },
-  { id: "rotate", name: "Rotate", icon: "↻" },
-  { id: "flicker", name: "Flicker", icon: "⚡" },
-  { id: "pulse", name: "Pulse", icon: "⬤" },
-  { id: "wiggle", name: "Wiggle", icon: "〰️" },
+  // { id: "drift", name: "Drift", icon: "⇄" },
+  // { id: "tectonic", name: "Tectonic", icon: "⇆" },
+  // { id: "tumble", name: "Tumble", icon: "⟳" },
+  // { id: "neon", name: "Neon", icon: "💡" },
+  // { id: "scrapbook", name: "Scrapbook", icon: "📄" },
+  // { id: "stomp", name: "Stomp", icon: "⬛" },
+  // { id: "photoFlow", name: "Photo Flow", icon: "📷↓" },
+  // { id: "photoRise", name: "Photo Rise", icon: "📷↑" },
+  // { id: "photoZoom", name: "Photo Zoom", icon: "🔍" },
+  // { id: "rotate", name: "Rotate", icon: "↻" },
+  // { id: "flicker", name: "Flicker", icon: "⚡" },
+  // { id: "pulse", name: "Pulse", icon: "⬤" },
+  // { id: "wiggle", name: "Wiggle", icon: "〰️" },
 ];
 
 
@@ -449,74 +449,74 @@ case "bounceUp":
   break;
 
 
-  case "drift":
-  obj.animate({ left: (obj.left || 0) + 10, top: (obj.top || 0) + 5 }, { duration, onChange: () => canvas.renderAll() });
-  break;
+//   case "drift":
+//   obj.animate({ left: (obj.left || 0) + 10, top: (obj.top || 0) + 5 }, { duration, onChange: () => canvas.renderAll() });
+//   break;
 
-case "tectonic":
-  obj.animate({ left: (obj.left || 0) + 5, top: (obj.top || 0) - 5 }, { duration, onChange: () => canvas.renderAll() });
-  break;
+// case "tectonic":
+//   obj.animate({ left: (obj.left || 0) + 5, top: (obj.top || 0) - 5 }, { duration, onChange: () => canvas.renderAll() });
+//   break;
 
-case "tumble":
-  obj.set({ angle: -360 });
-  obj.animate({ angle: 0 }, { duration, onChange: () => canvas.renderAll() });
-  break;
+// case "tumble":
+//   obj.set({ angle: -360 });
+//   obj.animate({ angle: 0 }, { duration, onChange: () => canvas.renderAll() });
+//   break;
 
-case "neon":
-  let neonOn = false;
-  const neonInterval = setInterval(() => {
-    obj.set({ stroke: neonOn ? "#8b5cf6" : "#ffffff" });
-    canvas.renderAll();
-    neonOn = !neonOn;
-  }, 300);
-  break;
+// case "neon":
+//   let neonOn = false;
+//   const neonInterval = setInterval(() => {
+//     obj.set({ stroke: neonOn ? "#8b5cf6" : "#ffffff" });
+//     canvas.renderAll();
+//     neonOn = !neonOn;
+//   }, 300);
+//   break;
 
-case "scrapbook":
-  obj.set({ angle: -10, left: (originalLeft || 0) - 5 });
-  obj.animate({ angle: 0, left: originalLeft }, { duration, onChange: () => canvas.renderAll() });
-  break;
+// case "scrapbook":
+//   obj.set({ angle: -10, left: (originalLeft || 0) - 5 });
+//   obj.animate({ angle: 0, left: originalLeft }, { duration, onChange: () => canvas.renderAll() });
+//   break;
 
-case "stomp":
-  obj.set({ scaleY: 0 });
-  obj.animate({ scaleY: 1 }, { duration, onChange: () => canvas.renderAll() });
-  break;
+// case "stomp":
+//   obj.set({ scaleY: 0 });
+//   obj.animate({ scaleY: 1 }, { duration, onChange: () => canvas.renderAll() });
+//   break;
 
-case "photoFlow":
-  obj.set({ top: (originalTop || 0) - 100, opacity: 0 });
-  obj.animate({ top: originalTop, opacity: 1 }, { duration, onChange: () => canvas.renderAll() });
-  break;
+// case "photoFlow":
+//   obj.set({ top: (originalTop || 0) - 100, opacity: 0 });
+//   obj.animate({ top: originalTop, opacity: 1 }, { duration, onChange: () => canvas.renderAll() });
+//   break;
 
-case "photoRise":
-  obj.set({ top: (originalTop || 0) + 100, opacity: 0 });
-  obj.animate({ top: originalTop, opacity: 1 }, { duration, onChange: () => canvas.renderAll() });
-  break;
+// case "photoRise":
+//   obj.set({ top: (originalTop || 0) + 100, opacity: 0 });
+//   obj.animate({ top: originalTop, opacity: 1 }, { duration, onChange: () => canvas.renderAll() });
+//   break;
 
-case "photoZoom":
-  obj.set({ scaleX: 0, scaleY: 0, opacity: 0 });
-  obj.animate({ scaleX: originalScaleX, scaleY: originalScaleY, opacity: 1 }, { duration, onChange: () => canvas.renderAll() });
-  break;
+// case "photoZoom":
+//   obj.set({ scaleX: 0, scaleY: 0, opacity: 0 });
+//   obj.animate({ scaleX: originalScaleX, scaleY: originalScaleY, opacity: 1 }, { duration, onChange: () => canvas.renderAll() });
+//   break;
 
-case "flicker":
-  let flickerOn = true;
-  const flickerInterval = setInterval(() => {
-    obj.set({ opacity: flickerOn ? 0 : 1 });
-    canvas.renderAll();
-    flickerOn = !flickerOn;
-  }, 150);
-  break;
+// case "flicker":
+//   let flickerOn = true;
+//   const flickerInterval = setInterval(() => {
+//     obj.set({ opacity: flickerOn ? 0 : 1 });
+//     canvas.renderAll();
+//     flickerOn = !flickerOn;
+//   }, 150);
+//   break;
 
-case "wiggle":
-  let wiggleCount = 0;
-  const wiggleInterval = setInterval(() => {
-    obj.set({ left: (originalLeft || 0) + (wiggleCount % 2 === 0 ? 5 : -5) });
-    canvas.renderAll();
-    wiggleCount++;
-    if (wiggleCount > 6) {
-      obj.set({ left: originalLeft });
-      clearInterval(wiggleInterval);
-    }
-  }, 50);
-  break;
+// case "wiggle":
+//   let wiggleCount = 0;
+//   const wiggleInterval = setInterval(() => {
+//     obj.set({ left: (originalLeft || 0) + (wiggleCount % 2 === 0 ? 5 : -5) });
+//     canvas.renderAll();
+//     wiggleCount++;
+//     if (wiggleCount > 6) {
+//       obj.set({ left: originalLeft });
+//       clearInterval(wiggleInterval);
+//     }
+//   }, 50);
+//   break;
 
     }
   };

@@ -139,9 +139,10 @@ interface RectanglePropertiesPanelProps {
   canvas: fabric.Canvas | null;
   selectedObject: fabric.Object | null;
   manager: CommandManager | null;
+  onOpenColorPicker?: (type: 'fill' | 'stroke' | 'shadow', color: string) => void;
 }
 
-const strokeStyles = [ /* ... (Same as before) ... */
+const strokeStyles = [ 
   { key: "solid", dash: [] },
   { key: "dashed", dash: [10, 5] },
   { key: "dotted", dash: [2, 5] },
@@ -153,7 +154,8 @@ const strokeStyles = [ /* ... (Same as before) ... */
 const RectanglePropertiesPanel: React.FC<RectanglePropertiesPanelProps> = ({
   canvas,
   selectedObject,
-  manager
+  manager,
+    onOpenColorPicker
 }) => {
   const [propsState, setPropsState] = useState<any>({
     x: 0, y: 0, width: 0, height: 0,
@@ -171,14 +173,58 @@ const RectanglePropertiesPanel: React.FC<RectanglePropertiesPanelProps> = ({
   const [opacity, setOpacity] = useState(100);
   const [anchorOpacity, setAnchorOpacity] = useState<null | HTMLElement>(null);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
-  const [colorPickerType, setColorPickerType] = useState<'fill' | 'stroke' | 'shadow' | null>(null);
+  const [colorPickerColor, setColorPickerColor] = useState<string>('#000000');
+// RectanglePropertiesPanel.tsx me colorPickerType type update karo
+const [colorPickerType, setColorPickerType] = useState<'fill' | 'stroke' | 'shadow' | 'svgFill' | null>(null);
   const [layerPopoverOpen, setLayerPopoverOpen] = useState(false);
 const [layerAnchorEl, setLayerAnchorEl] = useState<HTMLElement | null>(null);
+const [svgColors, setSvgColors] = useState<Array<{
+  index: number;
+  color: string;
+  label: string;
+}>>([]);
+const [isSVG, setIsSVG] = useState(false);
+
+
 
 
 
   useEffect(() => {
-    if (!selectedObject) return;
+  if (!selectedObject) {
+    setSvgColors([]);
+    setIsSVG(false);
+    return;
+  }
+
+
+  // Check if it's an editable SVG group
+  if ((selectedObject as any).isEditableSVG) {
+    setIsSVG(true);
+    const paths = (selectedObject as any).svgPaths || [];
+    
+    // Extract unique colors from SVG paths
+    const colorMap = new Map<string, number>();
+    paths.forEach((path: any, index: number) => {
+      const fill = path.fill;
+      if (fill && typeof fill === 'string' && fill !== 'none') {
+        if (!colorMap.has(fill)) {
+          colorMap.set(fill, index);
+        }
+      }
+    });
+
+    // Convert to array
+    const colors = Array.from(colorMap.entries()).map(([color, index], i) => ({
+      index,
+      color,
+      label: `Color ${i + 1}`
+    }));
+
+    setSvgColors(colors);
+  } else {
+    setIsSVG(false);
+    setSvgColors([]);
+  }
     const shadow = selectedObject.shadow as fabric.Shadow | undefined;
     let width = (selectedObject.width ?? 0) * (selectedObject.scaleX ?? 1);
     let height = (selectedObject.height ?? 0) * (selectedObject.scaleY ?? 1);
@@ -196,6 +242,8 @@ const [layerAnchorEl, setLayerAnchorEl] = useState<HTMLElement | null>(null);
     if (selectedObject.type === "polygon") sides = (selectedObject as any).points?.length ?? 3;
     if (selectedObject.type === "triangle") sides = 3;
 
+
+    
 
     setPropsState({
       x: selectedObject.left ?? 0,
@@ -215,14 +263,13 @@ const [layerAnchorEl, setLayerAnchorEl] = useState<HTMLElement | null>(null);
       radius,
       sides,
       strokeStyle: style,
-      
-      
     });
     setOpacity(Math.round((selectedObject.opacity ?? 1) * 100));
   }, [selectedObject]);
 
 
-  const handleChange = (prop: string, value: any) => { /* ... */ 
+  
+  const handleChange = (prop: string, value: any) => { 
       if (!selectedObject || !canvas || !manager) return;
       const prevValue = propsState[prop];
       const command: Command = {
@@ -232,7 +279,8 @@ const [layerAnchorEl, setLayerAnchorEl] = useState<HTMLElement | null>(null);
       manager.execute(command);
   };
 
-  const applyProp = (obj: fabric.Object, prop: string, value: any) => { /* ... */
+
+  const applyProp = (obj: fabric.Object, prop: string, value: any) => { 
       if (!obj) return;
 
       switch (prop) {
@@ -308,8 +356,74 @@ const [layerAnchorEl, setLayerAnchorEl] = useState<HTMLElement | null>(null);
     setColorPickerOpen(true);
   };
   
+// ---------------- SVG Color Change ----------------
   const handleColorChange = (color: string | any) => {
-    if (!colorPickerType) return;
+    if (!colorPickerType || !selectedObject) return;
+    
+    const newColor = typeof color === 'object' ? (color.hex || color) : color;
+    console.log('Color Change:', { colorPickerType, isSVG, oldColor: colorPickerColor, newColor });
+
+    // SVG color change - check both 'fill' and 'svgFill'
+    if (isSVG && (colorPickerType === 'fill' || colorPickerType === 'svgFill')) {
+      const paths = (selectedObject as any).svgPaths || [];
+      const oldColor = colorPickerColor;
+
+      console.log('SVG Paths:', paths.length, 'Old Color:', oldColor);
+
+      if (manager && canvas) {
+        manager.execute({
+          do: () => {
+            let changedCount = 0;
+            paths.forEach((p: any) => {
+              const currentFill = p.fill;
+              console.log('Checking path:', currentFill, 'vs', oldColor);
+              
+              // Flexible color matching (case-insensitive, with/without #)
+              if (
+                currentFill === oldColor ||
+                currentFill?.toLowerCase() === oldColor?.toLowerCase() ||
+                currentFill?.replace('#', '') === oldColor?.replace('#', '')
+              ) {
+                p.set('fill', newColor);
+                (p as any).editableFill = newColor;
+                changedCount++;
+                console.log('Changed path color to:', newColor);
+              }
+            });
+            
+            console.log('Total paths changed:', changedCount);
+            setSvgColors(prev => prev.map(c => 
+              c.color === oldColor || c.color?.toLowerCase() === oldColor?.toLowerCase()
+                ? { ...c, color: newColor } 
+                : c
+            ));
+            setPropsState((prev: any) => ({ ...prev, fill: newColor }));
+            canvas.requestRenderAll();
+          },
+          undo: () => {
+            paths.forEach((p: any) => {
+              if (
+                p.fill === newColor ||
+                p.fill?.toLowerCase() === newColor?.toLowerCase()
+              ) {
+                p.set('fill', oldColor);
+                (p as any).editableFill = oldColor;
+              }
+            });
+            setSvgColors(prev => prev.map(c => 
+              c.color === newColor || c.color?.toLowerCase() === newColor?.toLowerCase()
+                ? { ...c, color: oldColor } 
+                : c
+            ));
+            setPropsState((prev: any) => ({ ...prev, fill: oldColor }));
+            canvas.requestRenderAll();
+          }
+        });
+      }
+      return;
+    }
+
+    // Regular color / gradient (non-SVG objects)
     if (typeof color === 'object' && color.type) {
       if (colorPickerType === 'fill') {
         const objWidth = (selectedObject?.width ?? 100) * (selectedObject?.scaleX ?? 1);
@@ -324,10 +438,11 @@ const [layerAnchorEl, setLayerAnchorEl] = useState<HTMLElement | null>(null);
         handleChange('fill', gradient);
       }
     } else {
+      // Simple color change for non-SVG
       if (colorPickerType === 'shadow') {
-        handleChange('shadowColor', color);
+        handleChange('shadowColor', newColor);
       } else {
-        handleChange(colorPickerType, color);
+        handleChange(colorPickerType, newColor);
       }
     }
   };
@@ -469,7 +584,7 @@ const handleSendToBack = () => {
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mr: 1 }}>
             <Tooltip title="Fill Color">
               <CanvaIconButton
-                onClick={() => openColorPicker('fill')}
+              onClick={() => onOpenColorPicker?.('fill', propsState.fill)}
                 isActive={typeof propsState.fill !== 'string' || propsState.fill !== '#BEF4FF'} // Simple active check
                 sx={{
                   backgroundColor: typeof propsState.fill === 'string' ? propsState.fill : '#f3f4f6', 
@@ -487,7 +602,7 @@ const handleSendToBack = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Tooltip title="Border Color">
               <CanvaIconButton
-                onClick={() => openColorPicker('stroke')}
+               onClick={() => onOpenColorPicker?.('stroke', propsState.stroke)}
                 isActive={propsState.strokeWidth > 0}
                 sx={{
                   backgroundColor: propsState.stroke,
@@ -543,9 +658,41 @@ const handleSendToBack = () => {
         </PropertyGroup>
 
 
+{/*  SVG COLORS GROUP - SELECTED OUTLINE */}
+{isSVG && svgColors.length > 0 && (
+  <PropertyGroup>
+    {/* <Typography variant="caption" sx={{ fontSize: '10px', color: '#6b7280', mr: 1 }}>
+      SVG Colors:
+    </Typography> */}
+    <Box sx={{ display: 'flex', gap: 0.5, overflowX: 'auto', maxWidth: 300 }}>
+      {svgColors.map((colorInfo, idx) => {
+        const isSelected = colorInfo.color.toLowerCase() === colorPickerColor.toLowerCase();
+        return (
+          <Tooltip key={idx} title={`Change ${colorInfo.label}`}>
+            <CanvaIconButton
+              onClick={() => {
+                setColorPickerColor(colorInfo.color); 
+                if (onOpenColorPicker) onOpenColorPicker('fill', colorInfo.color);
+              }}
+              sx={{
+                backgroundColor: colorInfo.color,
+                border: isSelected ? '3px solid #9333ea' : '2px solid #e2e8f0',
+                width: 28,
+                height: 28,
+                minWidth: 28,
+                borderRadius: '50%',
+                transition: 'all 0.15s',
+              }}
+            />
+          </Tooltip>
+        );
+      })}
+    </Box>
+  </PropertyGroup>
+)}
+
         {/* 4. Effects (Shadow, Flip, Animate) Group */}
         <PropertyGroup>
-          
           {/* Flip */}
           <Tooltip title="Flip Horizontal">
             <CanvaIconButton isActive={propsState.flipX} onClick={() => handleChange("flipX", !propsState.flipX)}>
@@ -609,7 +756,6 @@ const handleSendToBack = () => {
 
       </Box>
 
-      {/* --- POPUP PANELS (Same as before) --- */}
 
       {/* Opacity Popover */}
       <Popover
@@ -744,25 +890,28 @@ const handleSendToBack = () => {
 
 
       {/* Canva Color Picker */}
-      <ColorPicker
-        isOpen={colorPickerOpen}
-        onClose={() => {
-          setColorPickerOpen(false);
-          setColorPickerType(null);
-        }}
-        currentColor={
-          colorPickerType === 'fill' ? propsState.fill :
-            colorPickerType === 'stroke' ? propsState.stroke :
-              propsState.shadowColor
-        }
-        onColorChange={handleColorChange}
-        title={
-          colorPickerType === 'fill' ? 'Fill Color' :
-            colorPickerType === 'stroke' ? 'Stroke Color' :
-              'Shadow Color'
-        }
-        allowGradients={colorPickerType === 'fill'}
-      />
+     <ColorPicker
+  isOpen={colorPickerOpen}
+  onClose={() => {
+    setColorPickerOpen(false);
+    setColorPickerType(null);
+  }}
+  currentColor={
+    colorPickerType === 'fill' && isSVG ? colorPickerColor :
+    colorPickerType === 'fill' ? propsState.fill :
+    colorPickerType === 'stroke' ? propsState.stroke :
+    colorPickerType === 'svgFill' ? colorPickerColor :
+    propsState.shadowColor
+  }
+  onColorChange={handleColorChange}
+  title={
+    colorPickerType === 'fill' ? 'Fill Color' :
+    colorPickerType === 'stroke' ? 'Stroke Color' :
+    colorPickerType === 'svgFill' ? 'SVG Color' :
+    'Shadow Color'
+  }
+  allowGradients={colorPickerType === 'fill'}
+/>
 
       {/* Animation Panel */}
       {showAnimationPanel && (

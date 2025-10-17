@@ -89,7 +89,7 @@ const ColorSwatch: React.FC<ColorSwatchProps> = styled(
 )(({ theme, selected }: { theme?: any; selected?: boolean }) => ({
   width: "40px",
   height: "40px",
-  borderRadius: "8px",
+  borderRadius: "50px",
   cursor: "pointer",
   border: selected ? "3px solid #7c3aed" : "1px solid #e5e7eb",
   position: "relative",
@@ -243,6 +243,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
   const [gradientColor2, setGradientColor2] = useState("#fecfef");
   const [gradientAngle, setGradientAngle] = useState(135);
   const [selectedGradient, setSelectedGradient] = useState<string | null>(null);
+  
 
   useEffect(() => {
     setSelectedColor(currentColor);
@@ -253,6 +254,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
     }
       }, [currentColor, isOpen]);
         const handleColorSelect = (color: string) => {
+            console.log("🎨 [ColorPicker] Selected color:", color);
     setSelectedColor(color);
     onColorChange(color);
      // Add to recent colors

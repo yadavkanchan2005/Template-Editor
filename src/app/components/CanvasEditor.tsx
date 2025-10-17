@@ -166,7 +166,7 @@
 //   ]);
 //   const [currentPage, setCurrentPage] = useState<number>(0);
 //   const userId = user?.id || null;
-  
+
 //   // Add page refs for scrolling
 //   const pageRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
@@ -175,7 +175,7 @@
 //     if (!canvasInstance) return;
 
 //     //Potions
-   
+
 //     const handleContextMenu = (e: MouseEvent) => {
 //       // Only show if an object is selected
 //       const pointer = canvasInstance.getPointer(e);
@@ -323,10 +323,10 @@
 //   }
 //   handleCloseContextMenu();
 // };
-  
 
 
- 
+
+
 // const handleOpenAlignMenu = (event: React.MouseEvent<HTMLElement>) => {
 //   setAlignMenuAnchor(event.currentTarget);
 // };
@@ -641,14 +641,14 @@
 //     if (index === currentPage) return;
 //     // save current
 //     if (canvasInstance) await saveCurrentCanvasToPage(currentPage);
-    
+
 //     // Scroll to page
 //     const pageId = pages[index].id;
 //     pageRefs.current[pageId]?.scrollIntoView({
 //       behavior: "smooth",
 //       block: "center",
 //     });
-    
+
 //     loadPageToCanvas(index);
 //   };
 //   // ---------------- Save: now includes pages ----------------
@@ -864,12 +864,12 @@
 //       fontWeight: "normal",
 //       fontFamily: "Inter",
 //     };
-    
+
 
 //     // Load Google Font dynamically if specified
 //     if (config.fontFamily && config.fontFamily !== "Inter") {
 //       const fontFamily = config.fontFamily.replace(/ /g, "+");
-      
+
 //       // Check if font is already loaded
 //       const existingLink = document.querySelector(`link[href*="${fontFamily}"]`);
 //       if (!existingLink) {
@@ -901,35 +901,35 @@
 //   },
 // onAddUpload: (data: any) => {
 //   if (!canvasInstance) return;
-  
+
 //   // ✅ Handle SVG
 //   if (data.type === "svg") {
 //     fabric.loadSVGFromString(data.data).then(({ objects, options }) => {
 //       // ✅ Filter out null values
 //       const validObjects = objects.filter((obj): obj is fabric.FabricObject => obj !== null);
-      
+
 //       if (validObjects.length === 0) {
 //         console.error('❌ No valid SVG objects found');
 //         return;
 //       }
-      
+
 //       const svgGroup = fabric.util.groupSVGElements(validObjects, options);
-      
+
 //       // Scale if too large
 //       const maxWidth = canvasInstance.width! * 0.5;
 //       const maxHeight = canvasInstance.height! * 0.5;
-      
+
 //       if (svgGroup.width! > maxWidth || svgGroup.height! > maxHeight) {
 //         const scale = Math.min(maxWidth / svgGroup.width!, maxHeight / svgGroup.height!);
 //         svgGroup.scale(scale);
 //       }
-      
+
 //       // Center
 //       svgGroup.set({
 //         left: (canvasInstance.width! - svgGroup.getScaledWidth()) / 2,
 //         top: (canvasInstance.height! - svgGroup.getScaledHeight()) / 2,
 //       });
-      
+
 //       canvasInstance.add(svgGroup);
 //       canvasInstance.setActiveObject(svgGroup);
 //       canvasInstance.requestRenderAll();
@@ -944,7 +944,7 @@
 //     });
 //     return;
 //   }
-  
+
 //   // ✅ Handle images
 //   if (data.type === "ADD_IMAGE") {
 //     fabric.Image.fromURL(
@@ -953,17 +953,17 @@
 //     ).then((img) => {
 //       const maxWidth = canvasInstance.width! * 0.5;
 //       const maxHeight = canvasInstance.height! * 0.5;
-      
+
 //       if (img.width! > maxWidth || img.height! > maxHeight) {
 //         const scale = Math.min(maxWidth / img.width!, maxHeight / img.height!);
 //         img.scale(scale);
 //       }
-      
+
 //       img.set({
 //         left: (canvasInstance.width! - img.getScaledWidth()) / 2,
 //         top: (canvasInstance.height! - img.getScaledHeight()) / 2,
 //       });
-      
+
 //       canvasInstance.add(img);
 //       canvasInstance.setActiveObject(img);
 //       canvasInstance.requestRenderAll();
@@ -2220,7 +2220,11 @@ const CanvasEditor: React.FC = () => {
   });
   const [currentTemplateId, setCurrentTemplateId] = useState<string | null>(null);
   const [isEditingTemplate, setIsEditingTemplate] = useState(false);
-  
+  // After existing states, add:
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [colorPickerType, setColorPickerType] = useState<'fill' | 'stroke' | 'shadow' | null>(null);
+  const [colorPickerColor, setColorPickerColor] = useState('#000000');
+
 
   // Multi-page state
   const [pages, setPages] = useState<PageItem[]>([
@@ -2228,27 +2232,12 @@ const CanvasEditor: React.FC = () => {
   ]);
   const [currentPage, setCurrentPage] = useState<number>(0);
   const userId = user?.id || null;
-  
+
   const pageRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   useEffect(() => setMounted(true), []);
 
 
-  function getUsedColors(target: fabric.Object | null): string[] {
-  if (!target) return [];
-  let colors: string[] = [];
-  if (target.type === "group") {
-    const items = (target as fabric.Group).getObjects();
-    items.forEach(item => {
-      const fill = (item as any).fill;
-      if (fill && typeof fill === "string") colors.push(fill.toLowerCase());
-    });
-  } else {
-    const fill = (target as any).fill;
-    if (fill && typeof fill === "string") colors.push(fill.toLowerCase());
-  }
-  return Array.from(new Set(colors));
-}
 
   // Context menu setup
   useEffect(() => {
@@ -2281,7 +2270,7 @@ const CanvasEditor: React.FC = () => {
   // Context menu actions
   const handleMenuAction = (action: string) => {
     if (!selectedObject || !canvasInstance) return;
-    
+
     switch (action) {
       case "copy":
         selectedObject.clone().then((cloned: fabric.Object) => (window as any)._clipboard = cloned);
@@ -2309,64 +2298,64 @@ const CanvasEditor: React.FC = () => {
         canvasInstance.remove(selectedObject);
         setSelectedObject(null);
         break;
-    case "ungroup":
-      if (selectedObject.type === "group") {
-        const group = selectedObject as fabric.Group;
-        const items = group.getObjects();
-        const groupLeft = group.left || 0;
-        const groupTop = group.top || 0;
-        const groupScaleX = group.scaleX || 1;
-        const groupScaleY = group.scaleY || 1;
-        const groupAngle = group.angle || 0;
+      case "ungroup":
+        if (selectedObject.type === "group") {
+          const group = selectedObject as fabric.Group;
+          const items = group.getObjects();
+          const groupLeft = group.left || 0;
+          const groupTop = group.top || 0;
+          const groupScaleX = group.scaleX || 1;
+          const groupScaleY = group.scaleY || 1;
+          const groupAngle = group.angle || 0;
 
-        canvasInstance.remove(group);
+          canvasInstance.remove(group);
 
-        items.forEach(item => {
-          // Set position and scale relative to group (no size change)
-          item.set({
-            left: groupLeft + (item.left || 0) * groupScaleX,
-            top: groupTop + (item.top || 0) * groupScaleY,
-            scaleX: (item.scaleX || 1) * groupScaleX,
-            scaleY: (item.scaleY || 1) * groupScaleY,
-            angle: (item.angle || 0) + groupAngle,
+          items.forEach(item => {
+            // Set position and scale relative to group (no size change)
+            item.set({
+              left: groupLeft + (item.left || 0) * groupScaleX,
+              top: groupTop + (item.top || 0) * groupScaleY,
+              scaleX: (item.scaleX || 1) * groupScaleX,
+              scaleY: (item.scaleY || 1) * groupScaleY,
+              angle: (item.angle || 0) + groupAngle,
+            });
+            canvasInstance.add(item);
           });
-          canvasInstance.add(item);
-        });
 
-        if (items.length > 0) {
-          canvasInstance.setActiveObject(items[0]);
-          setSelectedObject(items[0]);
-        } else {
-          setSelectedObject(null);
+          if (items.length > 0) {
+            canvasInstance.setActiveObject(items[0]);
+            setSelectedObject(items[0]);
+          } else {
+            setSelectedObject(null);
+          }
+          canvasInstance.requestRenderAll();
         }
-        canvasInstance.requestRenderAll();
-      }
-      break;
+        break;
 
-    case "group":
-      const activeObjects = canvasInstance.getActiveObjects();
-      if (activeObjects.length > 1) {
-        // Restore objects to canvas coordinates before grouping
-        const minLeft = Math.min(...activeObjects.map(obj => obj.left || 0));
-        const minTop = Math.min(...activeObjects.map(obj => obj.top || 0));
-        activeObjects.forEach(obj => {
-          obj.set({
-            left: (obj.left || 0) - minLeft,
-            top: (obj.top || 0) - minTop,
+      case "group":
+        const activeObjects = canvasInstance.getActiveObjects();
+        if (activeObjects.length > 1) {
+          // Restore objects to canvas coordinates before grouping
+          const minLeft = Math.min(...activeObjects.map(obj => obj.left || 0));
+          const minTop = Math.min(...activeObjects.map(obj => obj.top || 0));
+          activeObjects.forEach(obj => {
+            obj.set({
+              left: (obj.left || 0) - minLeft,
+              top: (obj.top || 0) - minTop,
+            });
           });
-        });
-        const group = new fabric.Group(activeObjects, {
-          left: minLeft,
-          top: minTop,
-          canvas: canvasInstance,
-        });
-        activeObjects.forEach(obj => canvasInstance.remove(obj));
-        canvasInstance.add(group);
-        canvasInstance.setActiveObject(group);
-        setSelectedObject(group);
-        canvasInstance.requestRenderAll();
-      }
-      break;
+          const group = new fabric.Group(activeObjects, {
+            left: minLeft,
+            top: minTop,
+            canvas: canvasInstance,
+          });
+          activeObjects.forEach(obj => canvasInstance.remove(obj));
+          canvasInstance.add(group);
+          canvasInstance.setActiveObject(group);
+          setSelectedObject(group);
+          canvasInstance.requestRenderAll();
+        }
+        break;
       case "lock":
         selectedObject.set({
           selectable: true,
@@ -2492,13 +2481,18 @@ const CanvasEditor: React.FC = () => {
     if (!canvasInstance || !manager) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key.toLowerCase() === "z") {
+      // Undo - Ctrl+Z
+      if (e.ctrlKey && e.key.toLowerCase() === "z" && !e.shiftKey) {
         e.preventDefault();
         manager.undo();
+        return;
       }
-      if ((e.ctrlKey && e.key.toLowerCase() === "y") || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "z")) {
+      // Redo - Ctrl+Y or Ctrl+Shift+Z
+      if ((e.ctrlKey && e.key.toLowerCase() === "y") ||
+        (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "z")) {
         e.preventDefault();
         manager.redo();
+        return;
       }
       if (e.ctrlKey && e.key.toLowerCase() === "a") {
         e.preventDefault();
@@ -2561,7 +2555,7 @@ const CanvasEditor: React.FC = () => {
   const loadPageToCanvas = (index: number) => {
     const page = pages[index];
     if (!canvasInstance) return;
-    
+
     saveCurrentCanvasToPage(currentPage);
 
     const locked = page?.locked || false;
@@ -2707,13 +2701,13 @@ const CanvasEditor: React.FC = () => {
   const handleSwitchToPage = async (index: number) => {
     if (index === currentPage) return;
     if (canvasInstance) await saveCurrentCanvasToPage(currentPage);
-    
+
     const pageId = pages[index].id;
     pageRefs.current[pageId]?.scrollIntoView({
       behavior: "smooth",
       block: "center",
     });
-    
+
     loadPageToCanvas(index);
   };
 
@@ -2928,119 +2922,194 @@ const CanvasEditor: React.FC = () => {
     },
 
 
-onAddUpload: (data: any) => {
-  if (!canvasInstance) return;
-  
-  //  Handle SVG
-  if (data.type === "svg") {
-    fabric.loadSVGFromString(data.data).then(({ objects, options }) => {
-      //  Filter out null values
-      const validObjects = objects.filter((obj): obj is fabric.FabricObject => obj !== null);
-      
-      if (validObjects.length === 0) {
-        console.error(' No valid SVG objects found');
+    // onAddUpload: (data: any) => {
+    //   if (!canvasInstance) return;
+
+    //   //  Handle SVG
+    //   if (data.type === "svg") {
+    //     fabric.loadSVGFromString(data.data).then(({ objects, options }) => {
+    //       //  Filter out null values
+    //       const validObjects = objects.filter((obj): obj is fabric.FabricObject => obj !== null);
+
+    //       if (validObjects.length === 0) {
+    //         console.error(' No valid SVG objects found');
+    //         return;
+    //       }
+
+    //       const svgGroup = fabric.util.groupSVGElements(validObjects, options);
+
+    //       // Scale if too large
+    //       const maxWidth = canvasInstance.width! * 0.5;
+    //       const maxHeight = canvasInstance.height! * 0.5;
+
+    //       if (svgGroup.width! > maxWidth || svgGroup.height! > maxHeight) {
+    //         const scale = Math.min(maxWidth / svgGroup.width!, maxHeight / svgGroup.height!);
+    //         svgGroup.scale(scale);
+    //       }
+
+    //       // Center
+    //       svgGroup.set({
+    //         left: (canvasInstance.width! - svgGroup.getScaledWidth()) / 2,
+    //         top: (canvasInstance.height! - svgGroup.getScaledHeight()) / 2,
+    //       });
+
+    //       canvasInstance.add(svgGroup);
+    //       canvasInstance.setActiveObject(svgGroup);
+    //       canvasInstance.requestRenderAll();
+    //       setSelectedObject(svgGroup);
+    //     }).catch((error) => {
+    //       console.error('❌ Failed to load SVG:', error);
+    //       setSnackbar({
+    //         open: true,
+    //         message: "Failed to load SVG element",
+    //         severity: "error"
+    //       });
+    //     });
+    //     return;
+    //   }
+
+    onAddUpload: (data: any) => {
+      if (!canvasInstance) return;
+
+      // ✅ FIXED SVG UPLOAD
+      if (data.type === "svg") {
+        fabric.loadSVGFromString(data.data).then(({ objects, options }) => {
+          const validObjects = objects.filter((obj): obj is fabric.FabricObject => obj !== null);
+
+          if (validObjects.length === 0) {
+            console.error('❌ No valid SVG objects found');
+            setSnackbar({
+              open: true,
+              message: "SVG ke andar koi objects nahi hain",
+              severity: "error"
+            });
+            return;
+          }
+
+          // ✅ KEY FIX: Store original colors before grouping
+          const colorMap = new Map<string, number>();
+          validObjects.forEach((obj, idx) => {
+            const fill = obj.fill;
+            if (fill && typeof fill === 'string' && fill !== 'none' && fill !== 'transparent') {
+              if (!colorMap.has(fill)) {
+                colorMap.set(fill, idx);
+              }
+              console.log(`Path ${idx}: Original Color = ${fill}`);
+            }
+          });
+
+          const svgGroup = fabric.util.groupSVGElements(validObjects, options);
+
+          // ✅ KEY FIX: Mark as editable SVG and store all info
+          (svgGroup as any).isEditableSVG = true;
+          (svgGroup as any).svgPaths = validObjects;
+          (svgGroup as any).svgColorMap = colorMap;
+          (svgGroup as any).originalColors = new Map(colorMap);
+
+          console.log('✅ SVG Group Setup:', {
+            isEditableSVG: true,
+            pathCount: validObjects.length,
+            uniqueColors: colorMap.size,
+            colors: Array.from(colorMap.keys())
+          });
+
+          // Scale if too large
+          const maxWidth = canvasInstance.width! * 0.5;
+          const maxHeight = canvasInstance.height! * 0.5;
+
+          if (svgGroup.width! > maxWidth || svgGroup.height! > maxHeight) {
+            const scale = Math.min(maxWidth / svgGroup.width!, maxHeight / svgGroup.height!);
+            svgGroup.scale(scale);
+          }
+
+          // Center on canvas
+          svgGroup.set({
+            left: (canvasInstance.width! - svgGroup.getScaledWidth()) / 2,
+            top: (canvasInstance.height! - svgGroup.getScaledHeight()) / 2,
+          });
+
+          canvasInstance.add(svgGroup);
+          canvasInstance.setActiveObject(svgGroup);
+          canvasInstance.requestRenderAll();
+          setSelectedObject(svgGroup);
+
+        }).catch((error) => {
+          console.error('❌ Failed to load SVG:', error);
+          setSnackbar({
+            open: true,
+            message: "SVG load nahi hua",
+            severity: "error"
+          });
+        });
         return;
       }
-      
-      const svgGroup = fabric.util.groupSVGElements(validObjects, options);
-      
-      // Scale if too large
-      const maxWidth = canvasInstance.width! * 0.5;
-      const maxHeight = canvasInstance.height! * 0.5;
-      
-      if (svgGroup.width! > maxWidth || svgGroup.height! > maxHeight) {
-        const scale = Math.min(maxWidth / svgGroup.width!, maxHeight / svgGroup.height!);
-        svgGroup.scale(scale);
-      }
-      
-      // Center
-      svgGroup.set({
-        left: (canvasInstance.width! - svgGroup.getScaledWidth()) / 2,
-        top: (canvasInstance.height! - svgGroup.getScaledHeight()) / 2,
-      });
-      
-      canvasInstance.add(svgGroup);
-      canvasInstance.setActiveObject(svgGroup);
-      canvasInstance.requestRenderAll();
-      setSelectedObject(svgGroup);
-    }).catch((error) => {
-      console.error('❌ Failed to load SVG:', error);
-      setSnackbar({
-        open: true,
-        message: "Failed to load SVG element",
-        severity: "error"
-      });
-    });
-    return;
-  }
-  
 
-   // ✅ Handle images (background and regular)
-  if (data.type === "ADD_IMAGE") {
-    fabric.Image.fromURL(data.src, { crossOrigin: 'anonymous' }).then((img) => {
-      const canvasWidth = canvasInstance.width!;
-      const canvasHeight = canvasInstance.height!;
+      // ✅ Handle images (background and regular)
+      if (data.type === "ADD_IMAGE") {
+        fabric.Image.fromURL(data.src, { crossOrigin: 'anonymous' }).then((img) => {
+          const canvasWidth = canvasInstance.width!;
+          const canvasHeight = canvasInstance.height!;
 
-      if (data.isBackground) {
-        // Scale image to exactly fit canvas (no crop, no blank space)
-        const scaleX = canvasWidth / img.width!;
-        const scaleY = canvasHeight / img.height!;
-        img.set({
-          scaleX,
-          scaleY,
-          left: 0,
-          top: 0,
-          selectable: true,
-          evented: true,
-          hasControls: false,
-          hasBorders: false,
-          lockMovementX: true,
-          lockMovementY: true,
-          lockScalingX: true,
-          lockScalingY: true,
-          lockRotation: true,
+          if (data.isBackground) {
+            // Scale image to exactly fit canvas (no crop, no blank space)
+            const scaleX = canvasWidth / img.width!;
+            const scaleY = canvasHeight / img.height!;
+            img.set({
+              scaleX,
+              scaleY,
+              left: 0,
+              top: 0,
+              selectable: true,
+              evented: true,
+              hasControls: false,
+              hasBorders: false,
+              lockMovementX: true,
+              lockMovementY: true,
+              lockScalingX: true,
+              lockScalingY: true,
+              lockRotation: true,
+            });
+            (img as any).isBackground = true;
+
+            // Always add to bottom layer
+            canvasInstance.add(img);
+            // Move to bottom (type-safe)
+            const objs = canvasInstance.getObjects();
+            const imgIndex = objs.indexOf(img);
+            if (imgIndex > -1) {
+              objs.splice(imgIndex, 1);
+              objs.unshift(img);
+              canvasInstance.renderAll();
+            }
+            setSelectedObject(null);
+          } else {
+            // Regular image: scale and center
+            const maxWidth = canvasWidth * 0.5;
+            const maxHeight = canvasHeight * 0.5;
+            if (img.width! > maxWidth || img.height! > maxHeight) {
+              const scale = Math.min(maxWidth / img.width!, maxHeight / img.height!);
+              img.scale(scale);
+            }
+            img.set({
+              left: (canvasWidth - img.getScaledWidth()) / 2,
+              top: (canvasHeight - img.getScaledHeight()) / 2,
+              selectable: true,
+              evented: true,
+            });
+            canvasInstance.add(img);
+            canvasInstance.setActiveObject(img);
+            setSelectedObject(img);
+          }
+          canvasInstance.requestRenderAll();
+        }).catch((error) => {
+          setSnackbar({
+            open: true,
+            message: "Failed to load image",
+            severity: "error"
+          });
         });
-        (img as any).isBackground = true;
-
-        // Always add to bottom layer
-        canvasInstance.add(img);
-        // Move to bottom (type-safe)
-        const objs = canvasInstance.getObjects();
-        const imgIndex = objs.indexOf(img);
-        if (imgIndex > -1) {
-          objs.splice(imgIndex, 1);
-          objs.unshift(img);
-          canvasInstance.renderAll();
-        }
-        setSelectedObject(null); 
-      } else {
-        // Regular image: scale and center
-        const maxWidth = canvasWidth * 0.5;
-        const maxHeight = canvasHeight * 0.5;
-        if (img.width! > maxWidth || img.height! > maxHeight) {
-          const scale = Math.min(maxWidth / img.width!, maxHeight / img.height!);
-          img.scale(scale);
-        }
-        img.set({
-          left: (canvasWidth - img.getScaledWidth()) / 2,
-          top: (canvasHeight - img.getScaledHeight()) / 2,
-          selectable: true,
-          evented: true,
-        });
-        canvasInstance.add(img);
-        canvasInstance.setActiveObject(img);
-        setSelectedObject(img);
       }
-      canvasInstance.requestRenderAll();
-    }).catch((error) => {
-      setSnackbar({
-        open: true,
-        message: "Failed to load image",
-        severity: "error"
-      });
-    });
-  }
-},
+    },
     onAddShape: (payload: any) => {
       if (payload && payload.type === "LOAD_TEMPLATE") {
         const snapshot = canvasInstance?.toJSON();
@@ -3116,6 +3185,9 @@ onAddUpload: (data: any) => {
       }
     },
 
+
+
+
     onDelete: () => setAction({ type: "DELETE" }),
     onUndo: () => setAction({ type: "UNDO" }),
     onRedo: () => setAction({ type: "REDO" }),
@@ -3128,6 +3200,160 @@ onAddUpload: (data: any) => {
     onExport: (format: string) => setAction({ type: "EXPORT", payload: format }),
     setActiveCategory,
     handleDrawMode,
+  };
+
+
+
+  const handleColorChange = (type: 'fill' | 'stroke' | 'shadow', color: string | any) => {
+    if (!canvasInstance || !manager || !selectedObject) return;
+
+    const isEditableSVG = (selectedObject as any).isEditableSVG;
+    console.log('🎨 handleColorChange Called:', {
+      type,
+      color: typeof color === 'object' ? color.type : color,
+      isEditableSVG,
+      selectedObjectType: selectedObject.type
+    });
+
+    // ========== SVG COLOR CHANGE ==========
+    if (isEditableSVG && type === 'fill') {
+      const newColor = typeof color === 'object' ? (color.hex || color) : color;
+      const oldColor = colorPickerColor;
+      const svgPaths = (selectedObject as any).svgPaths || [];
+
+      console.log('🎨 SVG Color Update:', {
+        oldColor,
+        newColor,
+        pathCount: svgPaths.length
+      });
+
+      if (!svgPaths || svgPaths.length === 0) {
+        console.error('❌ No SVG paths found');
+        return;
+      }
+
+      // Execute with undo/redo
+      manager.execute({
+        do: () => {
+          let changedCount = 0;
+          let debugLog: string[] = [];
+
+          svgPaths.forEach((path: any, idx: number) => {
+            const pathFill = path.fill;
+            const pathFillStr = String(pathFill).toLowerCase();
+            const oldColorStr = String(oldColor).toLowerCase();
+
+            // Flexible color matching
+            const isMatch =
+              pathFillStr === oldColorStr ||
+              pathFillStr.replace(/#/g, '') === oldColorStr.replace(/#/g, '');
+
+            if (isMatch) {
+              path.set('fill', newColor);
+              (path as any).editableFill = newColor;
+              changedCount++;
+              debugLog.push(`✅ Path ${idx}: ${pathFill} -> ${newColor}`);
+            } else {
+              debugLog.push(`❌ Path ${idx}: ${pathFill} (no match)`);
+            }
+          });
+
+          console.log('🎨 SVG Update Results:', debugLog);
+          console.log(`✅ Total paths changed: ${changedCount}`);
+
+          canvasInstance.requestRenderAll();
+        },
+        undo: () => {
+          svgPaths.forEach((path: any) => {
+            if (path.fill === newColor || String(path.fill).toLowerCase() === String(newColor).toLowerCase()) {
+              path.set('fill', oldColor);
+              (path as any).editableFill = oldColor;
+            }
+          });
+          canvasInstance.requestRenderAll();
+        }
+      });
+
+      return;
+    }
+
+    // ========== GRADIENT FILL ==========
+    if (typeof color === 'object' && color.type && type === 'fill' && !isEditableSVG) {
+      const objWidth = (selectedObject?.width ?? 100) * (selectedObject?.scaleX ?? 1);
+      const objHeight = (selectedObject?.height ?? 100) * (selectedObject?.scaleY ?? 1);
+
+      const gradient = new fabric.Gradient({
+        type: color.type || 'linear',
+        coords: color.type === 'radial'
+          ? {
+            x1: objWidth / 2,
+            y1: objHeight / 2,
+            x2: objWidth / 2,
+            y2: objHeight / 2,
+            r1: 0,
+            r2: Math.min(objWidth, objHeight) / 2
+          }
+          : { x1: 0, y1: 0, x2: objWidth, y2: 0 },
+        colorStops: color.colorStops || [
+          { offset: 0, color: '#ff6b6b' },
+          { offset: 1, color: '#4ecdc4' }
+        ]
+      });
+
+      const oldFill = (selectedObject as any).fill;
+
+      manager.execute({
+        do: () => {
+          (selectedObject as any).set('fill', gradient);
+          canvasInstance.requestRenderAll();
+        },
+        undo: () => {
+          (selectedObject as any).set('fill', oldFill);
+          canvasInstance.requestRenderAll();
+        }
+      });
+      return;
+    }
+
+    // ========== SOLID COLORS ==========
+    const newColor = typeof color === 'object' ? (color.hex || color) : color;
+
+    if (type === 'shadow') {
+      const oldShadow = (selectedObject as any).shadow;
+      const oldShadowColor = oldShadow?.color || '#000000';
+
+      manager.execute({
+        do: () => {
+          const shadow = (selectedObject as any).shadow
+            ? new fabric.Shadow((selectedObject as any).shadow)
+            : new fabric.Shadow({ color: '#000000', blur: 0, offsetX: 0, offsetY: 0 });
+          shadow.color = newColor;
+          (selectedObject as any).set('shadow', shadow);
+          canvasInstance.requestRenderAll();
+        },
+        undo: () => {
+          const shadow = (selectedObject as any).shadow
+            ? new fabric.Shadow((selectedObject as any).shadow)
+            : new fabric.Shadow({ color: '#000000', blur: 0, offsetX: 0, offsetY: 0 });
+          shadow.color = oldShadowColor;
+          (selectedObject as any).set('shadow', shadow);
+          canvasInstance.requestRenderAll();
+        }
+      });
+    } else {
+      const oldColor = (selectedObject as any)[type];
+
+      manager.execute({
+        do: () => {
+          (selectedObject as any).set(type, newColor);
+          canvasInstance.requestRenderAll();
+        },
+        undo: () => {
+          (selectedObject as any).set(type, oldColor);
+          canvasInstance.requestRenderAll();
+        }
+      });
+    }
   };
   const playAnimation = (obj: fabric.Object, animationId: string, speed: number) => {
     if (!canvasInstance) return;
@@ -3488,7 +3714,7 @@ onAddUpload: (data: any) => {
   const sidebarHandlers = {
     onAddText: handlers.onAddText,
     onAddShape: handlers.onAddShape,
-     onAddUpload: handlers.onAddUpload,
+    onAddUpload: handlers.onAddUpload,
     onDelete: handlers.onDelete,
     onBringForward: handlers.onBringForward,
     onSendBackward: handlers.onSendBackward,
@@ -3510,6 +3736,11 @@ onAddUpload: (data: any) => {
             canvas={canvasInstance}
             selectedObject={selectedObject as fabric.Rect | null}
             manager={manager}
+            onOpenColorPicker={(type, color) => {
+              setColorPickerType(type as 'fill' | 'stroke' | 'shadow');
+              setColorPickerColor(color);
+              setColorPickerOpen(true);
+            }}
           />
         );
       case "text":
@@ -3518,6 +3749,11 @@ onAddUpload: (data: any) => {
             canvas={canvasInstance}
             manager={manager}
             selectedObject={selectedObject as fabric.Textbox | null}
+            onOpenColorPicker={(type, color) => {
+              setColorPickerType(type);
+              setColorPickerColor(color);
+              setColorPickerOpen(true);
+            }}
           />
         );
       default:
@@ -3544,8 +3780,24 @@ onAddUpload: (data: any) => {
             <HeaderButton onClick={handleNewTemplate}>New</HeaderButton>
 
             {/* Undo/Redo */}
-            <HeaderButton startIcon={<UndoIcon />} onClick={handlers.onUndo} sx={{ mr: 0 }} />
-            <HeaderButton startIcon={<RedoIcon />} onClick={handlers.onRedo} sx={{ ml: 0 }} />
+            <HeaderButton
+              startIcon={<UndoIcon />}
+              onClick={handlers.onUndo}
+              disabled={!manager?.canUndo()}
+              sx={{
+                mr: 0,
+                opacity: manager?.canUndo() ? 1 : 0.5
+              }}
+            />
+            <HeaderButton
+              startIcon={<RedoIcon />}
+              onClick={handlers.onRedo}
+              disabled={!manager?.canRedo()}
+              sx={{
+                ml: 0,
+                opacity: manager?.canRedo() ? 1 : 0.5
+              }}
+            />
             {/* Preview */}
             <HeaderButton
               variant="contained"
@@ -3872,10 +4124,23 @@ onAddUpload: (data: any) => {
               <MiniCanva
                 action={action}
                 onCanvasReady={(canvas: fabric.Canvas) => {
-                  // When MiniCanva gives us the canvas for first time, set it and attempt to load current page
                   setCanvasInstance(canvas);
-                  setManager(new CommandManager(canvas));
-                  // Load the current page into canvas (if any)
+                  const mgr = new CommandManager(canvas);
+                  setManager(mgr);
+
+                  // Store initial state for objects when selected
+                  canvas.on('selection:created', (e) => {
+                    if (e.selected && e.selected[0]) {
+                      (e.selected[0] as any)._previousState = e.selected[0].toJSON();
+                    }
+                  });
+
+                  canvas.on('selection:updated', (e) => {
+                    if (e.selected && e.selected[0]) {
+                      (e.selected[0] as any)._previousState = e.selected[0].toJSON();
+                    }
+                  });
+
                   setTimeout(() => {
                     loadPageToCanvas(currentPage);
                   }, 50);
@@ -3919,134 +4184,158 @@ onAddUpload: (data: any) => {
           </Box>
         </Box>
 
- {/* Context Menu for right-click on canvas objects */}
-<Menu
-  open={contextMenu !== null}
-  onClose={handleCloseContextMenu}
-  anchorReference="anchorPosition"
-  anchorPosition={
-    contextMenu
-      ? { top: contextMenu.mouseY, left: contextMenu.mouseX + 100 }
-      : undefined
-  }
-  PaperProps={{ sx: { minWidth: 260, borderRadius: 2, boxShadow: 6 } }}
->
-  <MenuItem onClick={() => handleMenuAction("copy")}>
-    <ContentCopyIcon sx={{ mr: 1 }} /> Copy <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+C</span>
-  </MenuItem>
-  <MenuItem onClick={() => handleMenuAction("paste")}>
-    <ContentPasteIcon sx={{ mr: 1 }} /> Paste <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+V</span>
-  </MenuItem>
-  <MenuItem onClick={() => handleMenuAction("duplicate")}>
-    <ContentCopyIcon sx={{ mr: 1 }} /> Duplicate <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+D</span>
-  </MenuItem>
-  <MenuItem onClick={() => handleMenuAction("delete")}>
-    <DeleteIcon sx={{ mr: 1 }} /> Delete <span style={{ marginLeft: "auto", color: "#888" }}>Delete</span>
-  </MenuItem>
-  <Divider />
+        {/* Context Menu for right-click on canvas objects */}
+        <Menu
+          open={contextMenu !== null}
+          onClose={handleCloseContextMenu}
+          anchorReference="anchorPosition"
+          anchorPosition={
+            contextMenu
+              ? { top: contextMenu.mouseY, left: contextMenu.mouseX + 100 }
+              : undefined
+          }
+          PaperProps={{ sx: { minWidth: 260, borderRadius: 2, boxShadow: 6 } }}
+        >
+          <MenuItem onClick={() => handleMenuAction("copy")}>
+            <ContentCopyIcon sx={{ mr: 1 }} /> Copy <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+C</span>
+          </MenuItem>
+          <MenuItem onClick={() => handleMenuAction("paste")}>
+            <ContentPasteIcon sx={{ mr: 1 }} /> Paste <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+V</span>
+          </MenuItem>
+          <MenuItem onClick={() => handleMenuAction("duplicate")}>
+            <ContentCopyIcon sx={{ mr: 1 }} /> Duplicate <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+D</span>
+          </MenuItem>
+          <MenuItem onClick={() => handleMenuAction("delete")}>
+            <DeleteIcon sx={{ mr: 1 }} /> Delete <span style={{ marginLeft: "auto", color: "#888" }}>Delete</span>
+          </MenuItem>
+          <Divider />
 
-  {/* Group/Ungroup options */}
-  {(canvasInstance?.getActiveObjects() ?? []).length > 1 ? (
-    <MenuItem onClick={() => handleMenuAction("group")}>
-      <GroupIcon sx={{ mr: 1 }} /> Group <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+G</span>
-    </MenuItem>
-  ) : null}
-  {selectedObject?.type === "group" ? (
-    <MenuItem onClick={() => handleMenuAction("ungroup")}>
-      <GroupOffIcon sx={{ mr: 1 }} /> Ungroup <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+Shift+G</span>
-    </MenuItem>
-  ) : null}
+          {/* Group/Ungroup options */}
+          {(canvasInstance?.getActiveObjects() ?? []).length > 1 ? (
+            <MenuItem onClick={() => handleMenuAction("group")}>
+              <GroupIcon sx={{ mr: 1 }} /> Group <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+G</span>
+            </MenuItem>
+          ) : null}
+          {selectedObject?.type === "group" ? (
+            <MenuItem onClick={() => handleMenuAction("ungroup")}>
+              <GroupOffIcon sx={{ mr: 1 }} /> Ungroup <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+Shift+G</span>
+            </MenuItem>
+          ) : null}
 
-  <Divider />
+          <Divider />
 
-  {/* Layer submenu */}
-  <MenuItem disabled>
-    <LayersIcon sx={{ mr: 1 }} /> Layer
-  </MenuItem>
-  <MenuItem onClick={() => handleMenuAction("bringForward")}>
-    <ArrowUpwardIcon sx={{ mr: 1 }} /> Bring forward <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+]</span>
-  </MenuItem>
-  <MenuItem onClick={() => handleMenuAction("bringToFront")}>
-    <VerticalAlignTopIcon sx={{ mr: 1 }} /> Bring to front <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+Alt+]</span>
-  </MenuItem>
-  <MenuItem onClick={() => handleMenuAction("sendBackward")}>
-    <ArrowDownwardIcon sx={{ mr: 1 }} /> Send backward <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+[</span>
-  </MenuItem>
-  <MenuItem onClick={() => handleMenuAction("sendToBack")}>
-    <VerticalAlignBottomIcon sx={{ mr: 1 }} /> Send to back <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+Alt+[</span>
-  </MenuItem>
-  <Divider />
+          {/* Layer submenu */}
+          <MenuItem disabled>
+            <LayersIcon sx={{ mr: 1 }} /> Layer
+          </MenuItem>
+          <MenuItem onClick={() => handleMenuAction("bringForward")}>
+            <ArrowUpwardIcon sx={{ mr: 1 }} /> Bring forward <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+]</span>
+          </MenuItem>
+          <MenuItem onClick={() => handleMenuAction("bringToFront")}>
+            <VerticalAlignTopIcon sx={{ mr: 1 }} /> Bring to front <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+Alt+]</span>
+          </MenuItem>
+          <MenuItem onClick={() => handleMenuAction("sendBackward")}>
+            <ArrowDownwardIcon sx={{ mr: 1 }} /> Send backward <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+[</span>
+          </MenuItem>
+          <MenuItem onClick={() => handleMenuAction("sendToBack")}>
+            <VerticalAlignBottomIcon sx={{ mr: 1 }} /> Send to back <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+Alt+[</span>
+          </MenuItem>
+          <Divider />
 
-  {/* Align to page submenu */}
-  <MenuItem onClick={handleOpenAlignMenu}>
-    <AlignHorizontalLeftIcon sx={{ mr: 1 }} /> Align to page <MoreHorizIcon sx={{ ml: "auto" }} />
-  </MenuItem>
+          {/* Align to page submenu */}
+          <MenuItem onClick={handleOpenAlignMenu}>
+            <AlignHorizontalLeftIcon sx={{ mr: 1 }} /> Align to page <MoreHorizIcon sx={{ ml: "auto" }} />
+          </MenuItem>
 
-  {/* Lock/Unlock */}
-  {(selectedObject && (selectedObject as any).locked) ? (
-    <MenuItem onClick={() => handleMenuAction("unlock")}>
-      <LockOpenIcon sx={{ mr: 1 }} /> Unlock
-    </MenuItem>
-  ) : (
-    <MenuItem onClick={() => handleMenuAction("lock")}>
-      <LockIcon sx={{ mr: 1 }} /> Lock <span style={{ marginLeft: "auto", color: "#888" }}>Alt+Shift+L</span>
-    </MenuItem>
-  )}
-  <Divider />
+          {/* Lock/Unlock */}
+          {(selectedObject && (selectedObject as any).locked) ? (
+            <MenuItem onClick={() => handleMenuAction("unlock")}>
+              <LockOpenIcon sx={{ mr: 1 }} /> Unlock
+            </MenuItem>
+          ) : (
+            <MenuItem onClick={() => handleMenuAction("lock")}>
+              <LockIcon sx={{ mr: 1 }} /> Lock <span style={{ marginLeft: "auto", color: "#888" }}>Alt+Shift+L</span>
+            </MenuItem>
+          )}
+          <Divider />
 
-  {/* Extra options (UI only, not functional) */}
-  <MenuItem disabled>
-    <LinkIcon sx={{ mr: 1 }} /> Link <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+K</span>
-  </MenuItem>
-  <MenuItem disabled>
-    <AccessTimeIcon sx={{ mr: 1 }} /> Show element timing
-  </MenuItem>
-  <MenuItem disabled>
-    <CommentIcon sx={{ mr: 1 }} /> Comment <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+Alt+N</span>
-  </MenuItem>
-  <MenuItem disabled>
-    <TextFieldsIcon sx={{ mr: 1 }} /> Alternative text
-  </MenuItem>
-  <MenuItem disabled>
-    <WallpaperIcon sx={{ mr: 1 }} /> Replace background
-  </MenuItem>
-  <MenuItem disabled>
-    <ColorLensIcon sx={{ mr: 1 }} /> Apply colours to page
-  </MenuItem>
-  <MenuItem disabled>
-    <TranslateIcon sx={{ mr: 1 }} /> Translate text
-  </MenuItem>
-</Menu>
+          {/* Extra options (UI only, not functional) */}
+          <MenuItem disabled>
+            <LinkIcon sx={{ mr: 1 }} /> Link <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+K</span>
+          </MenuItem>
+          <MenuItem disabled>
+            <AccessTimeIcon sx={{ mr: 1 }} /> Show element timing
+          </MenuItem>
+          <MenuItem disabled>
+            <CommentIcon sx={{ mr: 1 }} /> Comment <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+Alt+N</span>
+          </MenuItem>
+          <MenuItem disabled>
+            <TextFieldsIcon sx={{ mr: 1 }} /> Alternative text
+          </MenuItem>
+          <MenuItem disabled>
+            <WallpaperIcon sx={{ mr: 1 }} /> Replace background
+          </MenuItem>
+          <MenuItem disabled>
+            <ColorLensIcon sx={{ mr: 1 }} /> Apply colours to page
+          </MenuItem>
+          <MenuItem disabled>
+            <TranslateIcon sx={{ mr: 1 }} /> Translate text
+          </MenuItem>
+        </Menu>
 
-{/* Align to page submenu */}
-<Menu
-  anchorEl={alignMenuAnchor}
-  open={Boolean(alignMenuAnchor)}
-  onClose={handleCloseAlignMenu}
-  anchorOrigin={{ vertical: "top", horizontal: "right" }}
-  transformOrigin={{ vertical: "top", horizontal: "left" }}
-  PaperProps={{ sx: { minWidth: 180, borderRadius: 2 } }}
->
-  <MenuItem onClick={() => handleAlignAction("left")}>
-    <AlignHorizontalLeftIcon sx={{ mr: 1 }} /> Left
-  </MenuItem>
-  <MenuItem onClick={() => handleAlignAction("center")}>
-    <AlignHorizontalCenterIcon sx={{ mr: 1 }} /> Centre
-  </MenuItem>
-  <MenuItem onClick={() => handleAlignAction("right")}>
-    <AlignHorizontalRightIcon sx={{ mr: 1 }} /> Right
-  </MenuItem>
-  <Divider />
-  <MenuItem onClick={() => handleAlignAction("top")}>
-    <AlignVerticalTopIcon sx={{ mr: 1 }} /> Top
-  </MenuItem>
-  <MenuItem onClick={() => handleAlignAction("middle")}>
-    <AlignVerticalCenterIcon sx={{ mr: 1 }} /> Middle
-  </MenuItem>
-  <MenuItem onClick={() => handleAlignAction("bottom")}>
-    <AlignVerticalBottomIcon sx={{ mr: 1 }} /> Bottom
-  </MenuItem>
-</Menu>
+        {/* Align to page submenu */}
+        <Menu
+          anchorEl={alignMenuAnchor}
+          open={Boolean(alignMenuAnchor)}
+          onClose={handleCloseAlignMenu}
+          anchorOrigin={{ vertical: "top", horizontal: "right" }}
+          transformOrigin={{ vertical: "top", horizontal: "left" }}
+          PaperProps={{ sx: { minWidth: 180, borderRadius: 2 } }}
+        >
+          <MenuItem onClick={() => handleAlignAction("left")}>
+            <AlignHorizontalLeftIcon sx={{ mr: 1 }} /> Left
+          </MenuItem>
+          <MenuItem onClick={() => handleAlignAction("center")}>
+            <AlignHorizontalCenterIcon sx={{ mr: 1 }} /> Centre
+          </MenuItem>
+          <MenuItem onClick={() => handleAlignAction("right")}>
+            <AlignHorizontalRightIcon sx={{ mr: 1 }} /> Right
+          </MenuItem>
+          <Divider />
+          <MenuItem onClick={() => handleAlignAction("top")}>
+            <AlignVerticalTopIcon sx={{ mr: 1 }} /> Top
+          </MenuItem>
+          <MenuItem onClick={() => handleAlignAction("middle")}>
+            <AlignVerticalCenterIcon sx={{ mr: 1 }} /> Middle
+          </MenuItem>
+          <MenuItem onClick={() => handleAlignAction("bottom")}>
+            <AlignVerticalBottomIcon sx={{ mr: 1 }} /> Bottom
+          </MenuItem>
+        </Menu>
+
+
+        {/* ColorPicker - Fixed on Right Side */}
+        {/* ColorPicker - Fixed on Right Side */}
+        <ColorPicker
+          isOpen={colorPickerOpen}
+          onClose={() => {
+            setColorPickerOpen(false);
+            setColorPickerType(null);
+          }}
+          currentColor={colorPickerColor}
+          onColorChange={(color) => {
+            if (colorPickerType) {
+              handleColorChange(colorPickerType, color);
+              setColorPickerColor(typeof color === 'object' ? color.hex || '#000000' : color);
+            }
+          }}
+          title={
+            colorPickerType === 'fill' ? 'Fill Colour' :
+              colorPickerType === 'stroke' ? 'Stroke Colour' :
+                'Shadow Colour'
+          }
+          allowGradients={colorPickerType === 'fill'}
+        />
 
         {/* Template panel will need thumbnails — TemplatePanel component should read pages[*].thumbnail from the template when loaded.
             We'll keep the TemplatePanel as you had but you promised to send your TemplatePanel so I can wire thumbnails in the sidebar. */}

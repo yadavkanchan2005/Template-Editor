@@ -64,13 +64,17 @@ interface TextPropertiesPanelProps {
     canvas: fabric.Canvas | null;
     manager?: any;
     selectedObject?: fabric.Textbox | null;
+      onOpenColorPicker?: (type: 'fill' | 'stroke', color: string) => void;
+      onOpenAnimation?: () => void;
     
 }
 
 const TextPropertiesPanel: React.FC<TextPropertiesPanelProps> = ({
     canvas,
     manager,
-    selectedObject
+    selectedObject,
+     onOpenColorPicker,
+       onOpenAnimation
     
 }) => {
     
@@ -78,11 +82,6 @@ const TextPropertiesPanel: React.FC<TextPropertiesPanelProps> = ({
     const [anchorOpacity, setAnchorOpacity] = useState<null | HTMLElement>(null);
     const [availableFonts, setAvailableFonts] = useState<string[]>(systemFonts);
     const [showAnimationPanel, setShowAnimationPanel] = useState(false);
-
-   // Color Picker States
-    const [colorPickerOpen, setColorPickerOpen] = useState(false);
-    const [colorPickerType, setColorPickerType] = useState<'fill' | 'stroke' | null>(null);
-
     const [textSpacing, setTextSpacing] = useState({
         letterSpacing: 0,
         lineHeight: 1.2,
@@ -165,27 +164,13 @@ const TextPropertiesPanel: React.FC<TextPropertiesPanelProps> = ({
         canvas.requestRenderAll();
     };
 
-  // Handle color change from Color Picker
-    const handleColorChange = (color: string | any) => {
-        if (!colorPickerType) return;
-        
-        // Check if it's a gradient object
-        if (typeof color === 'object' && color.type) {
-            // For gradients, only fill is supported in text
-            if (colorPickerType === 'fill') {
-                handleChange('fill', color.background);
-            }
-        } else {
-            // For solid colors
-            handleChange(colorPickerType, color);
-        }
-    };
 
     // Open color picker
-    const openColorPicker = (type: 'fill' | 'stroke') => {
-        setColorPickerType(type);
-        setColorPickerOpen(true);
-    };
+// Open color picker - NOW USES CALLBACK
+const openColorPicker = (type: 'fill' | 'stroke') => {
+    const color = type === 'fill' ? textProps.fill : textProps.stroke;
+    onOpenColorPicker?.(type, color); // ✅ Call parent callback
+};
 
 
     useEffect(() => {
@@ -937,7 +922,7 @@ const TextPropertiesPanel: React.FC<TextPropertiesPanelProps> = ({
       )}
 
          {/* Canva Color Picker Component */}
-            <ColorPicker
+            {/* <ColorPicker
                 isOpen={colorPickerOpen}
                 onClose={() => {
                     setColorPickerOpen(false);
@@ -947,7 +932,7 @@ const TextPropertiesPanel: React.FC<TextPropertiesPanelProps> = ({
                 onColorChange={handleColorChange}
                 title={colorPickerType === 'fill' ? 'Text colour' : 'Stroke colour'}
                 allowGradients={false} // Text doesn't support gradients typically
-            />
+            /> */}
         </>
        
     );
