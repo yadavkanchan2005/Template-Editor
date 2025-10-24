@@ -1,243 +1,240 @@
-// components/PageCanvas.tsx
 "use client";
-import React, { useRef, useEffect } from "react";
-import { Box, Typography, IconButton, Paper } from "@mui/material";
-import { styled } from "@mui/material/styles";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  Box,
+  Typography,
+  IconButton,
+} from "@mui/material";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import AddIcon from "@mui/icons-material/Add";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import DeleteIcon from "@mui/icons-material/Delete";
-import MiniCanva from "./MiniCanva";
 import * as fabric from "fabric";
 
-const PageCanvasWrapper = styled(Paper)(({ theme }) => ({
-  position: "relative",
-  backgroundColor: "#fff",
-  boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
-  borderRadius: "8px",
-  overflow: "hidden",
-  border: "2px solid transparent",
-  transition: "all 0.2s ease",
-  "&:hover": {
-    borderColor: "#7b68ee",
-    boxShadow: "0 8px 24px rgba(123,104,238,0.2)",
-  },
-  "&.active": {
-    borderColor: "#00c4cc",
-    boxShadow: "0 8px 32px rgba(0,196,204,0.3)",
-  },
-}));
-
-export type PageItem = {
+type PageItem = {
   id: string;
   name: string;
   fabricJSON: any | null;
   thumbnail: string | null;
-  locked: boolean;
-  width: number;
-  height: number;
+  locked?: boolean;
 };
 
 interface PageCanvasProps {
   page: PageItem;
   index: number;
-  isActive: boolean;
-  action: any;
-  onCanvasReady: (canvas: fabric.Canvas, pageId: string) => void;
-  onObjectSelected: (obj: fabric.Object | null) => void;
-  onPageClick: (index: number) => void;
+  canvasSize: { width: number; height: number };
+  onCanvasReady: (pageId: string, canvas: fabric.Canvas) => void;
+  onPageUpdate: (pageId: string) => void;
   onDuplicate: (index: number) => void;
-  onDelete: (index: number) => void;
+  onAddBelow: (index: number) => void;
   onToggleLock: (index: number) => void;
+  onDelete: (index: number) => void;
+  totalPages: number;
+  isActive: boolean;
+  onSetActive: () => void;
 }
 
 const PageCanvas: React.FC<PageCanvasProps> = ({
   page,
   index,
-  isActive,
-  action,
+  canvasSize,
   onCanvasReady,
-  onObjectSelected,
-  onPageClick,
+  onPageUpdate,
   onDuplicate,
-  onDelete,
+  onAddBelow,
   onToggleLock,
+  onDelete,
+  totalPages,
+  isActive,
+  onSetActive
 }) => {
-  const pageRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [canvas, setCanvas] = useState<fabric.Canvas | null>(null);
 
-  // Scroll into view when active
   useEffect(() => {
-    if (isActive && pageRef.current) {
-      pageRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
+    if (!canvasRef.current || canvas) return;
+
+    const fabricCanvas = new fabric.Canvas(canvasRef.current, {
+      width: canvasSize.width,
+      height: canvasSize.height,
+      backgroundColor: 'white',
+      preserveObjectStacking: true,
+    });
+
+    // Load page content if exists
+    if (page.fabricJSON) {
+      let jsonData = page.fabricJSON;
+      if (typeof jsonData === 'string') {
+        try {
+          jsonData = JSON.parse(jsonData);
+        } catch (e) {
+          console.error('Failed to parse fabricJSON:', e);
+        }
+      }
+
+      fabricCanvas.loadFromJSON(jsonData, () => {
+        if (jsonData.background) {
+          fabricCanvas.backgroundColor = jsonData.background;
+        }
+        fabricCanvas.renderAll();
       });
     }
-  }, [isActive]);
+
+    // Apply lock state
+    if (page.locked) {
+      fabricCanvas.selection = false;
+      fabricCanvas.getObjects().forEach((obj) => {
+        obj.selectable = false;
+        obj.evented = false;
+      });
+    }
+
+    // Auto-save on changes
+    fabricCanvas.on('object:modified', () => {
+      onPageUpdate(page.id);
+    });
+
+    fabricCanvas.on('object:added', () => {
+      onPageUpdate(page.id);
+    });
+
+    fabricCanvas.on('object:removed', () => {
+      onPageUpdate(page.id);
+    });
+
+    setCanvas(fabricCanvas);
+    onCanvasReady(page.id, fabricCanvas);
+
+    return () => {
+      fabricCanvas.dispose();
+    };
+  }, []);
+
+  // Update lock state
+  useEffect(() => {
+    if (!canvas) return;
+    
+    canvas.selection = !page.locked;
+    canvas.getObjects().forEach((obj) => {
+      obj.selectable = !page.locked;
+      obj.evented = !page.locked;
+    });
+    canvas.renderAll();
+  }, [page.locked, canvas]);
 
   return (
     <Box
-      ref={pageRef}
+      onClick={onSetActive}
       sx={{
-        position: "relative",
         width: "fit-content",
-        mb: 4,
+        position: "relative",
+        mb: 4
       }}
     >
-      {/* Page Header Controls */}
-      <Box
-        sx={{
-          position: "absolute",
-          top: -40,
-          left: 0,
-          right: 0,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          px: 2,
-          zIndex: 10,
-        }}
-      >
-        <Typography
-          variant="body2"
-          sx={{
-            color: isActive ? "#00c4cc" : "#64748b",
-            fontWeight: isActive ? 700 : 500,
-            fontSize: "0.875rem",
-          }}
-        >
-          {page.name}
+      {/* Page Controls */}
+      <Box sx={{
+        display: "flex",
+        gap: 1,
+        alignItems: "center",
+        justifyContent: "space-between",
+        background: "rgba(255,255,255,0.95)",
+        padding: "8px 12px",
+        borderRadius: "8px 8px 0 0",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+        width: canvasSize.width
+      }}>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          Page {index + 1} of {totalPages}
         </Typography>
-
-        {/* Page Controls */}
-        <Box sx={{ display: "flex", gap: 1 }}>
-          <IconButton
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleLock(index);
-            }}
-            sx={{
-              bgcolor: "white",
-              boxShadow: 1,
-              "&:hover": { bgcolor: "#f8f9fa" },
-            }}
-            title={page.locked ? "Unlock" : "Lock"}
-          >
-            {page.locked ? (
-              <LockIcon fontSize="small" />
-            ) : (
-              <LockOpenIcon fontSize="small" />
-            )}
-          </IconButton>
-
-          <IconButton
-            size="small"
+        
+        <Box sx={{ display: "flex", gap: 0.5 }}>
+          <IconButton 
+            size="small" 
             onClick={(e) => {
               e.stopPropagation();
               onDuplicate(index);
-            }}
-            disabled={!isActive}
-            sx={{
-              bgcolor: "white",
-              boxShadow: 1,
-              "&:hover": { bgcolor: "#f8f9fa" },
-            }}
-            title="Duplicate"
+            }} 
+            title="Duplicate page"
           >
             <ContentCopyIcon fontSize="small" />
           </IconButton>
-
-          <IconButton
-            size="small"
+          
+          <IconButton 
+            size="small" 
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddBelow(index);
+            }} 
+            title="Add page below"
+          >
+            <AddIcon fontSize="small" />
+          </IconButton>
+          
+          <IconButton 
+            size="small" 
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleLock(index);
+            }} 
+            title={page.locked ? "Unlock page" : "Lock page"}
+          >
+            {page.locked ? <LockIcon fontSize="small" /> : <LockOpenIcon fontSize="small" />}
+          </IconButton>
+          
+          <IconButton 
+            size="small" 
             onClick={(e) => {
               e.stopPropagation();
               onDelete(index);
-            }}
-            sx={{
-              bgcolor: "white",
-              boxShadow: 1,
-              "&:hover": { bgcolor: "#ffebee", color: "#d32f2f" },
-            }}
-            title="Delete"
+            }} 
+            title="Delete page"
+            sx={{ color: "#ef4444" }}
           >
             <DeleteIcon fontSize="small" />
           </IconButton>
         </Box>
       </Box>
 
-      {/* Canvas Container */}
-      <PageCanvasWrapper
-        className={isActive ? "active" : ""}
-        onClick={() => onPageClick(index)}
+      {/* Canvas */}
+      <Box
         sx={{
-          width: page.width,
-          height: page.height,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
           position: "relative",
-          cursor: isActive ? "default" : "pointer",
+          border: isActive ? "3px solid #7c3aed" : "2px solid #e2e8f0",
+          borderRadius: "0 0 8px 8px",
+          overflow: "hidden",
+          boxShadow: isActive 
+            ? "0 8px 24px rgba(124,58,237,0.3)" 
+            : "0 4px 12px rgba(0,0,0,0.08)",
+          transition: "all 0.3s ease",
+          cursor: "default",
+          "&:hover": {
+            border: isActive ? "3px solid #7c3aed" : "2px solid #a78bfa",
+            boxShadow: "0 8px 20px rgba(124,58,237,0.2)"
+          }
         }}
       >
-        {/* MiniCanva Component */}
-        {isActive ? (
-          <MiniCanva
-            action={action}
-            onCanvasReady={(canvas: fabric.Canvas) => onCanvasReady(canvas, page.id)}
-            onObjectSelected={onObjectSelected}
-            setSelectedObject={onObjectSelected}
-          />
-        ) : (
-          // Show thumbnail for inactive pages
-          <Box
-            sx={{
-              width: "100%",
-              height: "100%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: "#f8f9fa",
-            }}
-          >
-            {page.thumbnail ? (
-              <img
-                src={page.thumbnail}
-                alt={page.name}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "contain",
-                }}
-              />
-            ) : (
-              <Typography variant="h6" color="text.secondary">
-                {page.name}
-              </Typography>
-            )}
-          </Box>
-        )}
-
-        {/* Locked Overlay */}
+        <canvas ref={canvasRef} />
+        
         {page.locked && (
-          <Box
-            sx={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: "rgba(0,0,0,0.05)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              pointerEvents: "none",
-            }}
-          >
-            <LockIcon sx={{ fontSize: 64, color: "rgba(0,0,0,0.1)" }} />
+          <Box sx={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            background: "rgba(0,0,0,0.7)",
+            color: "white",
+            padding: "6px 10px",
+            borderRadius: 1,
+            display: "flex",
+            alignItems: "center",
+            gap: 0.5,
+            pointerEvents: "none"
+          }}>
+            <LockIcon fontSize="small" />
+            <Typography variant="caption">Locked</Typography>
           </Box>
         )}
-      </PageCanvasWrapper>
+      </Box>
     </Box>
   );
 };

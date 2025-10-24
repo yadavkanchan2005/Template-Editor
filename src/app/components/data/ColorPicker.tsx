@@ -141,7 +141,7 @@ const BrandColorButton = styled(Button)(({ theme }) => ({
   width: "100%",
   height: "44px",
   border: "2px dashed #d1d5db",
-  borderRadius: "8px",
+  borderRadius: "50px",
   color: "#6b7280",
   fontWeight: 500,
   fontSize: "13px",

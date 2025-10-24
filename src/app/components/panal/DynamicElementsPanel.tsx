@@ -563,18 +563,15 @@ const DynamicElementsPanel: React.FC<DynamicElementsPanelProps> = ({
   // Fetch categories and items from API on mount
 useEffect(() => {
   const fetchElements = async () => {
-    console.log('[DynamicElementsPanel] Fetching /media/elements ...');
     setLoading(true);
     try {
       const res = await api.get('/media/elements');
-      console.log('[DynamicElementsPanel] API response count:', Array.isArray(res.data) ? res.data.length : 'n/a');
       const data = res.data as Array<{ id: string; url: string; category: string; type?: string; filename?: string }>;
 
-      // ✅ Filter out UGC items and only keep element/ items
+      //  Filter out UGC items and only keep element/ items
       const filteredData = data.filter((d) => {
         // Check if URL contains 'element/' or 'element%2F' (URL encoded)
         const isElement = d.url && (d.url.includes('element/') || d.url.includes('element%2F'));
-        console.log(`[Filter] ${d.filename}: isElement=${isElement}, url=${d.url}`);
         return isElement;
       });
 
@@ -589,8 +586,6 @@ useEffect(() => {
       });
 
       const formattedCategories: ElementCategory[] = Object.entries(grouped).map(([key, items]) => ({ name: key, items }));
-      console.log('[DynamicElementsPanel] Grouped categories:', formattedCategories.map(c => `${c.name}:${c.items.length}`).join(', '));
-
       setCategories(formattedCategories);
 
       const initialCategoryData: { [key: string]: { items: ElementItem[]; loading: boolean } } = {};
@@ -620,23 +615,19 @@ useEffect(() => {
     );
   };
 
-// ✅ handleElementClick - detect if it's a background image
-// ✅ UPDATED handleElementClick function for DynamicElementsPanel.tsx
+// handleElementClick - detect if it's a background image
+// UPDATED handleElementClick function for DynamicElementsPanel.tsx
 
 const handleElementClick = async (item: ElementItem) => {
-  console.log('🖱️ Element clicked:', item);
-  
   const anyItem = item as any;
   
   if (anyItem.svg) {
-    console.log('📄 SVG type detected');
     onAddElement({ type: "svg", data: anyItem.svg });
     return;
   }
   
   if (anyItem.json) {
-    console.log('📄 JSON type detected');
-    onAddElement(anyItem.json);
+      onAddElement(anyItem.json);
     return;
   }
   
@@ -644,57 +635,56 @@ const handleElementClick = async (item: ElementItem) => {
     const url: string = anyItem.url;
     const fullUrl = getImageUrl(url);
     
-    console.log('🔗 URL detected:', { original: url, full: fullUrl });
     
     const lower = url.toLowerCase();
     
-    // ✅ Check if it's a background image
+    //  Check if it's a background image
     const isBackground = anyItem.category?.toLowerCase() === 'backgrounds' || 
-                        anyItem.category?.toLowerCase() === 'background';
+                      anyItem.category?.toLowerCase() === 'background';
     
-    // ✅ SVG FILE HANDLING
+    //  SVG FILE HANDLING
     if (lower.endsWith('.svg') || lower.includes('.svg')) {
-      console.log('🎨 Fetching SVG file...');
+      console.log(' Fetching SVG file...');
       try {
         const res = await fetch(fullUrl);
         const svgText = await res.text();
-        console.log('✅ SVG fetched, length:', svgText.length);
+        console.log(' SVG fetched, length:', svgText.length);
         
         // ✅ Send SVG as string for special handling
         onAddElement({ 
           type: 'svg', 
           data: svgText,
-          isFile: true // ✅ Important flag
+          isFile: true 
         });
       } catch (e) {
-        console.error('❌ Failed to fetch SVG:', e);
+        console.error(' Failed to fetch SVG:', e);
       }
       return;
     }
     
     // JSON
     if (lower.endsWith('.json') || lower.includes('.json')) {
-      console.log('📦 Fetching JSON...');
+      console.log(' Fetching JSON...');
       try {
         const res = await fetch(fullUrl);
         const json = await res.json();
-        console.log('✅ JSON fetched');
+        console.log('JSON fetched');
         onAddElement(json);
       } catch (e) {
-        console.error('❌ Failed to fetch JSON:', e);
+        console.error(' Failed to fetch JSON:', e);
       }
       return;
     }
     
     // Video
     if (lower.match(/\.(mp4|webm|mov)$/)) {
-      console.log('🎬 Video detected');
+      console.log(' Video detected');
       onAddElement({ type: 'video', src: fullUrl });
       return;
     }
     
     // Image
-    console.log('🖼️ Image detected', isBackground ? '(BACKGROUND)' : '(REGULAR)');
+    console.log('Image detected', isBackground ? '(BACKGROUND)' : '(REGULAR)');
     onAddElement({ 
       type: 'ADD_IMAGE', 
       src: fullUrl,
@@ -704,7 +694,7 @@ const handleElementClick = async (item: ElementItem) => {
   }
   
   if (anyItem.type) {
-    console.log('🔷 Shape type detected:', anyItem.type);
+    console.log('Shape type detected:', anyItem.type);
     onAddElement({ type: 'ADD_SHAPE', payload: anyItem.type });
   }
 };

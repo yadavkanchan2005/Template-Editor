@@ -193,6 +193,294 @@
 
 // export default Sidebar;
 
+
+
+
+// "use client";
+// import React, { useState, useEffect } from "react";
+// import { Drawer, IconButton, Tooltip, Divider, Box } from "@mui/material";
+// import { styled } from "@mui/material/styles";
+// import CreateIcon from "@mui/icons-material/Create";
+// import TemplatesPanel from "./panal/TemplatePanel";
+// import DynamicElementsPanel from "./panal/DynamicElementsPanel";
+// import MyProjectsPanel from "./panal/MyProjectsPanel";
+// import UploadsPanel from "./panal/UploadsPanel";
+// import TextPanel from "./panal/TextPanel";
+
+// const CanvaSidebar = styled(Drawer)(({ theme }) => ({
+//   "& .MuiDrawer-paper": {
+//     width: 80,
+//     backgroundColor: "#f8fafc",
+//     borderRight: "1px solid #e2e8f0",
+//     marginTop: "64px",
+//     paddingTop: theme.spacing(2),
+//     boxSizing: "border-box",
+//   },
+// }));
+
+// const SidebarIconButton = styled(IconButton)(({ theme }) => ({
+//   width: 48,
+//   height: 48,
+//   margin: "4px 8px",
+//   borderRadius: "12px",
+//   color: "#64748b",
+//   transition: "all 0.2s ease",
+//   "&:hover": {
+//     backgroundColor: "#e2e8f0",
+//     color: "#00c4cc",
+//     transform: "translateY(-1px)",
+//   },
+// }));
+
+// const SectionDivider = styled(Divider)(({ theme }) => ({
+//   margin: "12px 16px",
+//   backgroundColor: "#e2e8f0",
+// }));
+
+// interface SidebarProps {
+//   onAddText: (textConfig?: {
+//     text: string;
+//     fontSize: number;
+//     fontWeight: string | number;
+//     fontFamily?: string;
+//   }) => void;
+//   onAddShape: (shapeOrJson: any) => void;
+//   onDelete: () => void;
+//   onDrawMode: () => void;
+//   drawMode: boolean;
+//   activeCategory?: string | null;
+//   canvas?: any;
+//   onAddUpload?: (data: any) => void;
+// }
+
+// const Sidebar: React.FC<SidebarProps> = ({
+//   onAddText,
+//   onAddShape,
+//   onDrawMode,
+//   onAddUpload,
+// }) => {
+//   const [mounted, setMounted] = useState(false);
+//   const [elementsOpen, setElementsOpen] = useState(false);
+//   const [templatesOpen, setTemplatesOpen] = useState(false);
+//   const [projectsOpen, setProjectsOpen] = useState(false);
+//   const [uploadsOpen, setUploadsOpen] = useState(false);
+//   const [textPanelOpen, setTextPanelOpen] = useState(false);
+
+//   useEffect(() => setMounted(true), []);
+//   if (!mounted) return null;
+
+//   const toggleElementsPanel = () => {
+//     setElementsOpen((open) => !open);
+//     setTemplatesOpen(false);
+//     setProjectsOpen(false);
+//     setUploadsOpen(false);
+//     setTextPanelOpen(false);
+//   };
+
+//   const toggleTemplatesPanel = () => {
+//     setTemplatesOpen((open) => !open);
+//     setElementsOpen(false);
+//     setProjectsOpen(false);
+//     setUploadsOpen(false);
+//     setTextPanelOpen(false);
+//   };
+
+//   const toggleProjectsPanel = () => {
+//     setProjectsOpen((open) => !open);
+//     setElementsOpen(false);
+//     setTemplatesOpen(false);
+//     setUploadsOpen(false);
+//     setTextPanelOpen(false);
+//   };
+
+//   const toggleTextPanel = () => {
+//     setTextPanelOpen((open) => !open);
+//     setElementsOpen(false);
+//     setTemplatesOpen(false);
+//     setProjectsOpen(false);
+//     setUploadsOpen(false);
+//   };
+
+//   const toggleUploadsPanel = () => {
+//     setUploadsOpen((open) => !open);
+//     setElementsOpen(false);
+//     setTemplatesOpen(false);
+//     setProjectsOpen(false);
+//     setTextPanelOpen(false);
+//   };
+
+//   const closeElementsPanel = () => setElementsOpen(false);
+//   const closeTemplatesPanel = () => setTemplatesOpen(false);
+//   const closeProjectsPanel = () => setProjectsOpen(false);
+//   const closeTextPanel = () => setTextPanelOpen(false);
+//   const closeUploadsPanel = () => setUploadsOpen(false);
+
+//   // Handle template selection from Templates Panel
+//   const handleTemplateData = (templateData: any) => {
+//     console.log("Template received in Sidebar:", templateData);
+
+//     if (templateData && templateData.elements) {
+//       console.log("Processing template elements:", templateData.elements);
+
+//       // Load template into canvas
+//       onAddShape({
+//         type: "LOAD_TEMPLATE",
+//         template: templateData,
+//       });
+
+//       closeTemplatesPanel();
+//     }
+//   };
+
+//   // Handle project selection from My Projects Panel
+//   const handleProjectData = (projectData: any) => {
+//     console.log("Project received in Sidebar:", projectData);
+
+//     if (projectData && projectData.elements) {
+//       console.log("Processing project elements:", projectData.elements);
+
+//       // Load user's project into canvas
+//       onAddShape({
+//         type: "LOAD_TEMPLATE",
+//         template: projectData,
+//         isUserProject: true,
+//       });
+
+//       closeProjectsPanel();
+//     }
+//   };
+
+//   // Handle text addition from TextPanel
+//   const handleAddTextFromPanel = (textConfig: {
+//     text: string;
+//     fontSize: number;
+//     fontWeight: string | number;
+//     fontFamily?: string;
+//   }) => {
+//     console.log("Text config received:", textConfig);
+//     onAddText(textConfig);
+//   };
+
+//   // ✅ Handle elements from DynamicElementsPanel
+//   const handleAddElement = (elementData: any) => {
+//     console.log("🎨 Element received in Sidebar:", elementData);
+    
+//     if (onAddUpload) {
+//       onAddUpload(elementData);
+//     } else {
+//       console.warn("⚠️ onAddUpload not provided to Sidebar");
+//     }
+//   };
+
+//   return (
+//     <>
+//       <CanvaSidebar
+//         variant="permanent"
+//         anchor="left"
+//         sx={{ "& .MuiDrawer-paper": { position: "fixed", zIndex: 1200 } }}
+//       >
+//         <Box
+//           sx={{
+//             display: "flex",
+//             flexDirection: "column",
+//             alignItems: "center",
+//             height: "100%",
+//             overflowY: "auto",
+//           }}
+//         >
+//           {/* Templates */}
+//           <Tooltip title="Templates" placement="right" arrow>
+//             <SidebarIconButton onClick={toggleTemplatesPanel}>
+//               <img src="/uploadIcons/design.png" alt="Templates" width={70} height={70} />
+//             </SidebarIconButton>
+//           </Tooltip>
+
+//           <SectionDivider />
+
+//           {/* Elements */}
+//           <Tooltip title="Elements" placement="right" arrow>
+//             <SidebarIconButton onClick={toggleElementsPanel}>
+//               <img src="/uploadIcons/element1.png" alt="Elements" width={35} height={35} />
+//             </SidebarIconButton>
+//           </Tooltip>
+//           <SectionDivider />
+
+//           {/* Add Text */}
+//           <Tooltip title="Add Text" placement="right" arrow>
+//             <SidebarIconButton onClick={toggleTextPanel}>
+//               <img src="/uploadIcons/text.png" alt="Text" width={50} height={50} />
+//             </SidebarIconButton>
+//           </Tooltip>
+
+//           <SectionDivider />
+
+//           {/* My Projects */}
+//           <Tooltip title="My Projects" placement="right" arrow>
+//             <SidebarIconButton onClick={toggleProjectsPanel}>
+//               <img src="/uploadIcons/folder.png" alt="Projects" width={50} height={50} />
+//             </SidebarIconButton>
+//           </Tooltip>
+//           <SectionDivider />
+
+//           {/* Pencil / Draw */}
+//           <Tooltip title="Draw / Pencil" placement="right" arrow>
+//             <SidebarIconButton onClick={onDrawMode}>
+//               <CreateIcon />
+//             </SidebarIconButton>
+//           </Tooltip>
+
+//           {/* Uploads */}
+//           <Tooltip title="Uploads" placement="right" arrow>
+//             <SidebarIconButton onClick={toggleUploadsPanel}>
+//               <img src="/uploadIcons/uploadicon.png" alt="Uploads" width={35} height={35} />
+//             </SidebarIconButton>
+//           </Tooltip>
+//           <SectionDivider />
+//         </Box>
+//       </CanvaSidebar>
+
+//       {/* ✅ Dynamic Elements Panel - NOW USES handleAddElement */}
+//       {elementsOpen && (
+//         <DynamicElementsPanel 
+//           onAddElement={handleAddElement} 
+//           onClose={closeElementsPanel} 
+//         />
+//       )}
+
+//       {/* Templates Panel */}
+//       {templatesOpen && (
+//         <TemplatesPanel onTemplateSelect={handleTemplateData} onClose={closeTemplatesPanel} />
+//       )}
+
+//       {/* My Projects Panel */}
+//       {projectsOpen && (
+//         <MyProjectsPanel onSelectProject={handleProjectData} onClose={closeProjectsPanel} />
+//       )}
+
+//       {/* Uploads Panel */}
+//       {uploadsOpen && (
+//         <UploadsPanel onAddUpload={onAddUpload!} onClose={closeUploadsPanel} />
+//       )}
+
+//       {/* Text Panel */}
+//       {textPanelOpen && (
+//         <TextPanel onAddText={handleAddTextFromPanel} onClose={closeTextPanel} />
+//       )}
+//     </>
+//   );
+// };
+
+// export default Sidebar;
+
+
+
+
+
+
+
+
+
+
 "use client";
 import React, { useState, useEffect } from "react";
 import { Drawer, IconButton, Tooltip, Divider, Box } from "@mui/material";
@@ -248,6 +536,7 @@ interface SidebarProps {
   activeCategory?: string | null;
   canvas?: any;
   onAddUpload?: (data: any) => void;
+  onSelectProject?: (projectData: any) => void; // ✅ NEW PROP
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -255,6 +544,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onAddShape,
   onDrawMode,
   onAddUpload,
+  onSelectProject, // ✅ NEW PROP
 }) => {
   const [mounted, setMounted] = useState(false);
   const [elementsOpen, setElementsOpen] = useState(false);
@@ -312,39 +602,63 @@ const Sidebar: React.FC<SidebarProps> = ({
   const closeTextPanel = () => setTextPanelOpen(false);
   const closeUploadsPanel = () => setUploadsOpen(false);
 
-  // Handle template selection from Templates Panel
+  //  Handle template selection from Templates Panel
   const handleTemplateData = (templateData: any) => {
-    console.log("Template received in Sidebar:", templateData);
+    console.log("📋 Template received in Sidebar:", {
+      name: templateData?.name,
+      pages: templateData?.pages?.length,
+      hasSize: !!templateData?.size
+    });
 
-    if (templateData && templateData.elements) {
-      console.log("Processing template elements:", templateData.elements);
-
-      // Load template into canvas
-      onAddShape({
-        type: "LOAD_TEMPLATE",
-        template: templateData,
-      });
-
-      closeTemplatesPanel();
+    if (!templateData) {
+      console.error("❌ No template data received");
+      return;
     }
+
+    // Send proper LOAD_TEMPLATE action to CanvasEditor
+    onAddShape({
+      type: "LOAD_TEMPLATE",
+      template: {
+        ...templateData,
+        size: templateData.size || { width: 800, height: 600 },
+        isAdminTemplate: !templateData.userId
+      },
+    });
+
+    closeTemplatesPanel();
   };
 
-  // Handle project selection from My Projects Panel
+  // ✅ FIXED: Handle project selection - NO onAddShape call!
   const handleProjectData = (projectData: any) => {
-    console.log("Project received in Sidebar:", projectData);
+    console.log("🎯 Project received in Sidebar:", {
+      name: projectData?.name,
+      pages: projectData?.pages?.length,
+      size: projectData?.size,
+      hasUserId: !!projectData?.userId
+    });
 
-    if (projectData && projectData.elements) {
-      console.log("Processing project elements:", projectData.elements);
-
-      // Load user's project into canvas
-      onAddShape({
-        type: "LOAD_TEMPLATE",
-        template: projectData,
-        isUserProject: true,
-      });
-
-      closeProjectsPanel();
+    if (!projectData) {
+      console.error("❌ No project data received");
+      return;
     }
+
+    // Validate pages
+    if (!projectData.pages || projectData.pages.length === 0) {
+      console.error("❌ Project has no pages");
+      alert("This project has no pages to load");
+      return;
+    }
+
+    // ✅ CRITICAL FIX: Don't call onAddShape!
+    // Just pass directly to CanvasEditor's onSelectProject
+    if (onSelectProject) {
+      console.log("✅ Passing project to CanvasEditor directly");
+      onSelectProject(projectData);
+    } else {
+      console.error("❌ onSelectProject prop not provided!");
+    }
+
+    closeProjectsPanel();
   };
 
   // Handle text addition from TextPanel
@@ -354,16 +668,18 @@ const Sidebar: React.FC<SidebarProps> = ({
     fontWeight: string | number;
     fontFamily?: string;
   }) => {
-    console.log("Text config received:", textConfig);
+    console.log("📝 Text config received:", textConfig);
     onAddText(textConfig);
+    closeTextPanel();
   };
 
-  // ✅ Handle elements from DynamicElementsPanel
+  //  Handle elements from DynamicElementsPanel
   const handleAddElement = (elementData: any) => {
     console.log("🎨 Element received in Sidebar:", elementData);
     
     if (onAddUpload) {
       onAddUpload(elementData);
+      closeElementsPanel();
     } else {
       console.warn("⚠️ onAddUpload not provided to Sidebar");
     }
@@ -436,7 +752,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         </Box>
       </CanvaSidebar>
 
-      {/* ✅ Dynamic Elements Panel - NOW USES handleAddElement */}
+      {/* Dynamic Elements Panel */}
       {elementsOpen && (
         <DynamicElementsPanel 
           onAddElement={handleAddElement} 
@@ -446,22 +762,34 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Templates Panel */}
       {templatesOpen && (
-        <TemplatesPanel onTemplateSelect={handleTemplateData} onClose={closeTemplatesPanel} />
+        <TemplatesPanel 
+          onTemplateSelect={handleTemplateData} 
+          onClose={closeTemplatesPanel} 
+        />
       )}
 
       {/* My Projects Panel */}
       {projectsOpen && (
-        <MyProjectsPanel onSelectProject={handleProjectData} onClose={closeProjectsPanel} />
+        <MyProjectsPanel 
+          onSelectProject={handleProjectData} 
+          onClose={closeProjectsPanel} 
+        />
       )}
 
       {/* Uploads Panel */}
-      {uploadsOpen && (
-        <UploadsPanel onAddUpload={onAddUpload!} onClose={closeUploadsPanel} />
+      {uploadsOpen && onAddUpload && (
+        <UploadsPanel 
+          onAddUpload={onAddUpload} 
+          onClose={closeUploadsPanel} 
+        />
       )}
 
-      {/* Text Panel */}
+      {/*  Text Panel */}
       {textPanelOpen && (
-        <TextPanel onAddText={handleAddTextFromPanel} onClose={closeTextPanel} />
+        <TextPanel 
+          onAddText={handleAddTextFromPanel} 
+          onClose={closeTextPanel} 
+        />
       )}
     </>
   );
