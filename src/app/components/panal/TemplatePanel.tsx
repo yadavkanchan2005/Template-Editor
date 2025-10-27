@@ -94,11 +94,22 @@ const TemplatesPanel: React.FC<TemplatesPanelProps> = ({ onTemplateSelect, onClo
 
   // Recent used logic (first template as recent for demo)
   const recentTemplates = templates.length ? [templates[0]] : [];
-  const filteredTemplates = templates.filter((template) => {
-    const matchesSearch = template.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const tplCategory = (template as any)?.category;
-    const matchesCategory = activeCategory === "All" || tplCategory === activeCategory;
-    return matchesSearch && matchesCategory;
+  // const filteredTemplates = templates.filter((template) => {
+  //   const matchesSearch = template.name.toLowerCase().includes(searchQuery.toLowerCase());
+  //   const tplCategory = (template as any)?.category;
+  //   const matchesCategory = activeCategory === "All" || tplCategory === activeCategory;
+  //   return matchesSearch && matchesCategory;
+
+  // Exclude recentTemplates from "All results"
+const filteredTemplates = templates.filter((template) => {
+  const isRecent = recentTemplates.some((recent) => recent.id === template.id);
+  if (isRecent) return false; // skip if in recent
+
+  const matchesSearch = template.name.toLowerCase().includes(searchQuery.toLowerCase());
+  const tplCategory = (template as any)?.category;
+  const matchesCategory = activeCategory === "All" || tplCategory === activeCategory;
+
+  return matchesSearch && matchesCategory;
   });
 
   return (
@@ -174,85 +185,87 @@ const TemplatesPanel: React.FC<TemplatesPanelProps> = ({ onTemplateSelect, onClo
           Styles
         </Typography>
       </Box>
+{/* Categories Box with arrows OUTSIDE the scroll container */}
+<Box sx={{ px: 2, mb: 2, display: "flex", alignItems: "center" }}>
+  {/* Left Arrow */}
+  <IconButton
+    size="small"
+    sx={{
+      p: 0,
+      mr: 1,
+      bgcolor: "transparent",
+      boxShadow: "none",
+      "&:hover": { bgcolor: "transparent" },
+    }}
+    onClick={() => scrollCategories("left")}
+  >
+    <ArrowBackIosNewIcon fontSize="small" sx={{ fontSize: 18 }} />
+  </IconButton>
 
-      {/* Categories Box */}
-      <Box
-        sx={{
-          px: 2,
-          mb: 2,
-          display: "flex",
-          gap: 1,
-          overflowX: "auto",
-          pb: 1,
-          pt: 1,
-          "&::-webkit-scrollbar": { display: "none" },
-        }}
-        ref={categoriesRef}
-      >
-        {categories.map((cat, idx) => (
-          <Box
-            key={cat}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              px: 0,
-            }}
-          >
-            {/* Left arrow for first category */}
-            {idx === 0 && (
-              <IconButton
-                size="small"
-                sx={{
-                  p: 0,
-                  mr: 1,
-                  bgcolor: "transparent",
-                  boxShadow: "none",
-                  "&:hover": { bgcolor: "transparent" },
-                }}
-                onClick={() => scrollCategories("left")}
-              >
-                <ArrowBackIosNewIcon fontSize="small" sx={{ fontSize: 18 }} />
-              </IconButton>
-            )}
-            <Box
-              sx={{
-                border: "1px solid #222",
-                borderRadius: "10px",
-                background: "#fff",
-                px: 2,
-                py: 1,
-                minWidth: 80,
-                fontSize: 15,
-                display: "flex",
-                alignItems: "center",
-                fontWeight: activeCategory === cat ? 600 : 500,
-                color: activeCategory === cat ? "#a855f7" : "#222",
-                cursor: "pointer",
-                boxShadow: activeCategory === cat ? "0 2px 8px #a855f733" : "none",
-              }}
-              onClick={() => setActiveCategory(cat)}
-            >
-              {cat}
-            </Box>
-            {/* Right arrow for last category */}
-            {idx === categories.length - 1 && (
-              <IconButton
-                size="small"
-                sx={{
-                  p: 0,
-                  ml: 1,
-                  bgcolor: "transparent",
-                  boxShadow: "none",
-                  "&:hover": { bgcolor: "transparent" },
-                }}
-                onClick={() => scrollCategories("right")}
-              >
-                <ArrowForwardIosIcon fontSize="small" sx={{ fontSize: 18 }} />
-              </IconButton>
-            )}
-          </Box>
-        ))}
-      </Box>
+  {/* Scrollable Categories Container */}
+ {/* Categories Box */}
+<Box
+  sx={{
+    px: 2,
+    mb: 2,
+    display: "flex",
+    gap: 1,
+    overflowX: "auto",  // horizontal scroll
+    overflowY: "hidden",
+    pb: 1,
+    pt: 1,
+    whiteSpace: "nowrap", // prevent wrapping
+    "&::-webkit-scrollbar": { display: "none" },
+  }}
+  ref={categoriesRef}
+>
+  {categories.map((cat, idx) => (
+    <Box
+      key={cat}
+      sx={{
+        flex: "0 0 auto", // important: prevent box from shrinking
+        border: "1px solid #222",
+        borderRadius: "10px",
+        background: "#fff",
+        px: 2,
+        py: 1,
+        minWidth: 80,
+        maxWidth: 140, // adjust max width
+        fontSize: 15,
+        display: "flex",
+        alignItems: "center",
+        fontWeight: activeCategory === cat ? 600 : 500,
+        color: activeCategory === cat ? "#a855f7" : "#222",
+        cursor: "pointer",
+        boxShadow: activeCategory === cat ? "0 2px 8px #a855f733" : "none",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        textTransform: "none", // fix small caps
+      }}
+      onClick={() => setActiveCategory(cat)}
+    >
+      {cat}
+    </Box>
+  ))}
+</Box>
+
+  {/* Right Arrow */}
+  <IconButton
+    size="small"
+    sx={{
+      p: 0,
+      ml: 1,
+      bgcolor: "transparent",
+      boxShadow: "none",
+      "&:hover": { bgcolor: "transparent" },
+    }}
+    onClick={() => scrollCategories("right")}
+  >
+    <ArrowForwardIosIcon fontSize="small" sx={{ fontSize: 18 }} />
+  </IconButton>
+</Box>
+
 
       {/* Loading State */}
       {loading && (
@@ -274,60 +287,67 @@ const TemplatesPanel: React.FC<TemplatesPanelProps> = ({ onTemplateSelect, onClo
       {!loading && !error && (
         <Box sx={{ flex: 1, overflowY: "auto", px: 2, pb: 2 }}>
           {/* Recently used */}
-          {recentTemplates.length > 0 && (
-            <>
-              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-                Recently used
-              </Typography>
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, mb: 2 }}>
-                {recentTemplates.map((template) => (
-                  <Box
-                    key={template.id}
-                    sx={{
-                      width: "calc(50% - 8px)",
-                      mb: 2,
-                    }}
-                  >
-                    <Card
-                      sx={{
-                        borderRadius: "14px",
-                        boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
-                        transition: "transform 0.2s, box-shadow 0.2s",
-                        "&:hover": { transform: "scale(1.02)", boxShadow: "0 8px 32px rgba(0,0,0,0.16)" },
-                        bgcolor: "#f9f6ff"
-                      }}
-                    >
-                      <CardActionArea onClick={() => handleSelect(template)}>
-                        <CardMedia
-                          component="img"
-                          height={170}
-                          image={getThumbnailUrl(template.thumbnail)}
-                          alt={template.name}
-                          sx={{
-                            objectFit: "cover",
-                            borderTopLeftRadius: "14px",
-                            borderTopRightRadius: "14px",
-                            backgroundColor: "#f5f5f5"
-                          }}
-                        />
-                        <CardContent sx={{ pt: 1, pb: 1 }}>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: 15 }}>
-                            {template.name}
-                          </Typography>
-                          {template.size && (
-                            <Typography variant="caption" color="text.secondary">
-                              {template.size.width} x {template.size.height}
-                            </Typography>
-                          )}
-                        </CardContent>
-                      </CardActionArea>
-                    </Card>
-                  </Box>
-                ))}
-              </Box>
-            </>
-          )}
-
+        {/* Recently used */}
+{recentTemplates.length > 0 && (
+  <>
+    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+      Recently used
+    </Typography>
+    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, mb: 2 }}>
+      {recentTemplates.map((template) => (
+        <Box
+          key={template.id}
+          sx={{
+            width: "calc(50% - 8px)", // two per row
+            mb: 2,
+          }}
+        >
+          <Card
+            sx={{
+              height: 240, // uniform card height
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              borderRadius: "0px",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              "&:hover": {
+                transform: "scale(1.02)",
+                boxShadow: "0 8px 32px rgba(0,0,0,0.16)",
+              },
+              bgcolor: "#f9f6ff",
+            }}
+          >
+            <CardActionArea onClick={() => handleSelect(template)}>
+              <CardMedia
+                component="img"
+                height={160} // fixed image height
+                image={getThumbnailUrl(template.thumbnail)}
+                alt={template.name}
+                sx={{
+                  objectFit: "cover",
+                  borderTopLeftRadius: "0px",
+                  borderTopRightRadius: "0px",
+                  backgroundColor: "#f5f5f5",
+                }}
+              />
+              <CardContent sx={{ pt: 1, pb: 1 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: 15 }}>
+                  {template.name}
+                </Typography>
+                {template.size && (
+                  <Typography variant="caption" color="text.secondary">
+                    {template.size.width} x {template.size.height}
+                  </Typography>
+                )}
+              </CardContent>
+            </CardActionArea>
+          </Card>
+        </Box>
+      ))}
+    </Box>
+  </>
+)}
           {/* All results */}
           <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
             All results
@@ -343,7 +363,7 @@ const TemplatesPanel: React.FC<TemplatesPanelProps> = ({ onTemplateSelect, onClo
               >
                 <Card
                   sx={{
-                    borderRadius: "14px",
+                    borderRadius: "0px",
                     boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
                     transition: "transform 0.2s, box-shadow 0.2s",
                     "&:hover": { transform: "scale(1.02)", boxShadow: "0 8px 32px rgba(0,0,0,0.16)" },
@@ -353,13 +373,13 @@ const TemplatesPanel: React.FC<TemplatesPanelProps> = ({ onTemplateSelect, onClo
                   <CardActionArea onClick={() => handleSelect(template)}>
                     <CardMedia
                       component="img"
-                      height={170}
+                      height={200}
                       image={getThumbnailUrl(template.thumbnail)}
                       alt={template.name}
                       sx={{
                         objectFit: "cover",
-                        borderTopLeftRadius: "14px",
-                        borderTopRightRadius: "14px",
+                        borderTopLeftRadius: "0px",
+                        borderTopRightRadius: "0px",
                         backgroundColor: "#f5f5f5"
                       }}
                     />

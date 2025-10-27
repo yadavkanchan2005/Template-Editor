@@ -55,17 +55,15 @@ import WallpaperIcon from "@mui/icons-material/Wallpaper";
 import TranslateIcon from "@mui/icons-material/Translate";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import Sidebar from "./Sidebar";
-import MiniCanva from "./MiniCanva";
 import RectanglePropertiesPanel from "./RectanglePropertiesPanel";
 import TextPropertiesPanel from "./TextPropertiesPanel";
-import DynamicElementsPanel from "./panal/DynamicElementsPanel";
-import AnimationPanel from "./AnimationSidebar/AnimationPanel";
 import CommandManager from "@/lib/CommandManager";
 import { useAuth } from "../../hooks/context/AuthContext";
 import TemplatePanel from "./panal/TemplatePanel";
 import { templateApi } from "../../../services/templateApi";
-import ColorPicker from "./data/ColorPicker"; 
+import ColorPicker from "./data/ColorPicker";
 import MyProjectsPanel from "./panal/MyProjectsPanel";
+import PageCanvas from "./PageCanvas";
 
 import * as fabric from "fabric";
 import { v4 as uuidv4 } from "uuid";
@@ -127,8 +125,11 @@ const CanvasEditor: React.FC = () => {
   const { user, isAuthenticated, isAdmin, logout } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [action, setAction] = useState<{ type: string; payload?: any } | null>(null);
-  const [canvasInstance, setCanvasInstance] = useState<fabric.Canvas | null>(null);
-  const [manager, setManager] = useState<CommandManager | null>(null);
+  // Multi-canvas system
+  const [canvases, setCanvases] = useState<Map<string, fabric.Canvas>>(new Map());
+  const [activePageIndex, setActivePageIndex] = useState<number>(0);
+  const [managers, setManagers] = useState<Map<string, CommandManager>>(new Map());
+  const autoSaveTimers = useRef<{ [key: string]: NodeJS.Timeout }>({});
   const [selectedObject, setSelectedObject] = useState<fabric.Object | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [propertyTab, setPropertyTab] = useState("rectangle");
@@ -144,7 +145,6 @@ const CanvasEditor: React.FC = () => {
     object: fabric.Object | null;
   } | null>(null);
   const [alignMenuAnchor, setAlignMenuAnchor] = useState<null | HTMLElement>(null);
-
   // Save functionality states
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [baseAdminTemplateId, setBaseAdminTemplateId] = useState<string | null>(null);
@@ -162,55 +162,169 @@ const CanvasEditor: React.FC = () => {
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [colorPickerType, setColorPickerType] = useState<'fill' | 'stroke' | 'shadow' | null>(null);
   const [colorPickerColor, setColorPickerColor] = useState('#000000');
-
   // Multi-page state
   const [pages, setPages] = useState<PageItem[]>([{ id: uuidv4(), name: "Page 1", fabricJSON: null, thumbnail: null, locked: false },]);
-  const [currentPage, setCurrentPage] = useState<number>(0);
   const userId = user?.id || null;
   const pageRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const [isLoadingProject, setIsLoadingProject] = useState(false);
+  const [activePageId, setActivePageId] = useState<string | null>(null);
+
+
+  const canvasInstance = canvases.get(pages[activePageIndex]?.id) || null;
+  const manager = managers.get(pages[activePageIndex]?.id) || null;
+
+
 
   useEffect(() => setMounted(true), []);
 
 
+  //  Fabric 5+ safe cross-platform paste
+useEffect(() => {
+  const handlePaste = async (e: ClipboardEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+    e.preventDefault();
+
+    const activeCanvas = activePageId ? canvases.get(activePageId) : null;
+    if (!activeCanvas) return;
+
+    try {
+      const text = e.clipboardData?.getData('text');
+      if (text) {
+        try {
+          const json = JSON.parse(text);
+          if (json.type && json.objects) {
+            const objects: fabric.FabricObject[] = await fabric.util.enlivenObjects(json.objects);
+            objects.forEach((obj) => {
+              obj.set({
+                left: (obj.left || 0) + 20,
+                top: (obj.top || 0) + 20,
+              });
+              activeCanvas.add(obj);
+            });
+            activeCanvas.requestRenderAll();
+            return;
+          }
+        } catch { }
+
+        const textbox = new fabric.Textbox(text, {
+          left: 100,
+          top: 100,
+          fontSize: 24,
+          fill: '#000000',
+          width: 400,
+        });
+        activeCanvas.add(textbox);
+        activeCanvas.setActiveObject(textbox);
+        activeCanvas.requestRenderAll();
+        return;
+      }
+
+      const items = e.clipboardData?.items;
+      if (items) {
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf('image') !== -1) {
+            const blob = items[i].getAsFile();
+            if (blob) {
+              const reader = new FileReader();
+              reader.onload = (event) => {
+                fabric.Image.fromURL(event.target?.result as string, {
+                  crossOrigin: 'anonymous',
+                }).then((img) => {
+                  img.scaleToWidth(400);
+                  img.set({ left: 100, top: 100 });
+                  activeCanvas.add(img);
+                  activeCanvas.setActiveObject(img);
+                  activeCanvas.requestRenderAll();
+                });
+              };
+              reader.readAsDataURL(blob);
+              return;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Paste error:', error);
+    }
+  };
+
+  window.addEventListener('paste', handlePaste);
+  
+  //  Safe cleanup
+  return () => {
+    try {
+      window.removeEventListener('paste', handlePaste);
+    } catch (error) {
+      console.warn('Paste listener cleanup warning:', error);
+    }
+  };
+}, [canvases, activePageId]);
+
+
   //  Auto-save before page refresh/close
   useEffect(() => {
-    const handleBeforeUnload = async (e: BeforeUnloadEvent) => {
-      if (canvasInstance) {
-        await saveCurrentCanvasToPage(currentPage);
-        console.log(' Auto-saved before window close');
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      try {
+        canvases.forEach((canvas, pageId) => {
+          if (canvas && canvas.toJSON) {
+            const fabricJSON = canvas.toJSON();
+            setPages(prev => prev.map(p =>
+              p.id === pageId ? { ...p, fabricJSON } : p
+            ));
+          }
+        });
+        console.log(' Auto-saved all canvases before close');
+      } catch (error) {
+        console.warn('Auto-save error:', error);
       }
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [canvasInstance, currentPage]);
-
-  // Context menu setup
-  useEffect(() => {
-    if (!canvasInstance) return;
-
-    const handleContextMenu = (e: MouseEvent) => {
-      const target = canvasInstance.findTarget(e);
-
-      if (target) {
-        e.preventDefault();
-        setSelectedObject(target);
-        setContextMenu({
-          mouseX: e.clientX - 2,
-          mouseY: e.clientY - 4,
-          object: target,
-        });
-      } else {
-        setContextMenu(null);
-      }
-    };
-
-    canvasInstance.upperCanvasEl.addEventListener("contextmenu", handleContextMenu);
     return () => {
-      canvasInstance.upperCanvasEl.removeEventListener("contextmenu", handleContextMenu);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [canvasInstance]);
+  }, []); //  Empty deps to avoid re-attaching
+
+
+//  FIXED: Safe context menu setup
+useEffect(() => {
+  if (!canvasInstance) return;
+
+  const handleContextMenu = (e: MouseEvent) => {
+    const target = canvasInstance.findTarget(e);
+
+    if (target) {
+      e.preventDefault();
+      setSelectedObject(target);
+      setContextMenu({
+        mouseX: e.clientX - 2,
+        mouseY: e.clientY - 4,
+        object: target,
+      });
+    } else {
+      setContextMenu(null);
+    }
+  };
+
+  //  Check if upperCanvasEl exists before adding listener
+  const upperCanvas = canvasInstance.upperCanvasEl;
+  if (upperCanvas) {
+    upperCanvas.addEventListener("contextmenu", handleContextMenu);
+  }
+
+  return () => {
+    // Safe cleanup - check if still exists
+    if (upperCanvas && upperCanvas.removeEventListener) {
+      try {
+        upperCanvas.removeEventListener("contextmenu", handleContextMenu);
+      } catch (error) {
+        console.warn('Context menu cleanup warning:', error);
+      }
+    }
+  };
+}, [canvasInstance]);
 
   const handleCloseContextMenu = () => setContextMenu(null);
 
@@ -245,62 +359,60 @@ const CanvasEditor: React.FC = () => {
         canvasInstance.remove(selectedObject);
         setSelectedObject(null);
         break;
+
       case "ungroup":
-        if (selectedObject.type === "group") {
+        if (selectedObject?.type === "group" && canvasInstance) {
           const group = selectedObject as fabric.Group;
           const items = group.getObjects();
-          const groupLeft = group.left || 0;
-          const groupTop = group.top || 0;
-          const groupScaleX = group.scaleX || 1;
-          const groupScaleY = group.scaleY || 1;
-          const groupAngle = group.angle || 0;
+
+          //  FIXED: Calculate absolute positions
+          const groupMatrix = group.calcTransformMatrix();
 
           canvasInstance.remove(group);
 
           items.forEach(item => {
-            // Set position and scale relative to group (no size change)
+            // Apply group's transform to get absolute position
+            const absolutePoint = fabric.util.transformPoint(
+              { x: item.left || 0, y: item.top || 0 },
+              groupMatrix
+            );
+
             item.set({
-              left: groupLeft + (item.left || 0) * groupScaleX,
-              top: groupTop + (item.top || 0) * groupScaleY,
-              scaleX: (item.scaleX || 1) * groupScaleX,
-              scaleY: (item.scaleY || 1) * groupScaleY,
-              angle: (item.angle || 0) + groupAngle,
+              left: absolutePoint.x,
+              top: absolutePoint.y,
+              angle: (item.angle || 0) + (group.angle || 0),
+              scaleX: (item.scaleX || 1) * (group.scaleX || 1),
+              scaleY: (item.scaleY || 1) * (group.scaleY || 1),
             });
+
+            item.setCoords();
             canvasInstance.add(item);
           });
 
-          if (items.length > 0) {
-            canvasInstance.setActiveObject(items[0]);
-            setSelectedObject(items[0]);
-          } else {
-            setSelectedObject(null);
-          }
           canvasInstance.requestRenderAll();
+          console.log('Ungrouped without position change');
         }
         break;
 
+
       case "group":
-        const activeObjects = canvasInstance.getActiveObjects();
-        if (activeObjects.length > 1) {
-          // Restore objects to canvas coordinates before grouping
-          const minLeft = Math.min(...activeObjects.map(obj => obj.left || 0));
-          const minTop = Math.min(...activeObjects.map(obj => obj.top || 0));
-          activeObjects.forEach(obj => {
-            obj.set({
-              left: (obj.left || 0) - minLeft,
-              top: (obj.top || 0) - minTop,
-            });
-          });
+        const activeObjects = canvasInstance?.getActiveObjects() || [];
+        if (activeObjects.length > 1 && canvasInstance) {
+          // FIXED: Preserve absolute positions
           const group = new fabric.Group(activeObjects, {
-            left: minLeft,
-            top: minTop,
-            canvas: canvasInstance,
+            // Keep objects at their current canvas positions
+            interactive: true,
           });
+
+          // Remove individual objects
           activeObjects.forEach(obj => canvasInstance.remove(obj));
+
+          // Add group
           canvasInstance.add(group);
           canvasInstance.setActiveObject(group);
-          setSelectedObject(group);
           canvasInstance.requestRenderAll();
+
+          console.log('Grouped without position change');
         }
         break;
       case "lock":
@@ -402,6 +514,9 @@ const CanvasEditor: React.FC = () => {
     setExportAnchorEl(null);
   };
 
+
+
+
   const exportOpen = Boolean(exportAnchorEl);
 
   useEffect(() => {
@@ -428,12 +543,19 @@ const CanvasEditor: React.FC = () => {
     if (!canvasInstance || !manager) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      //  Check if user is typing in input field
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return; // Don't interfere with typing
+      }
+
       // Undo - Ctrl+Z
       if (e.ctrlKey && e.key.toLowerCase() === "z" && !e.shiftKey) {
         e.preventDefault();
         manager.undo();
         return;
       }
+
       // Redo - Ctrl+Y or Ctrl+Shift+Z
       if ((e.ctrlKey && e.key.toLowerCase() === "y") ||
         (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "z")) {
@@ -441,24 +563,53 @@ const CanvasEditor: React.FC = () => {
         manager.redo();
         return;
       }
+
+      //  DELETE KEY FIX
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        const active = canvasInstance.getActiveObject();
+        if (active) {
+          canvasInstance.remove(active);
+          canvasInstance.discardActiveObject();
+          canvasInstance.requestRenderAll();
+          setSelectedObject(null);
+        }
+        return;
+      }
+
+      // Select All
       if (e.ctrlKey && e.key.toLowerCase() === "a") {
         e.preventDefault();
         canvasInstance.discardActiveObject();
-        const sel = new fabric.ActiveSelection(canvasInstance.getObjects(), { canvas: canvasInstance });
+        const sel = new fabric.ActiveSelection(
+          canvasInstance.getObjects(),
+          { canvas: canvasInstance }
+        );
         canvasInstance.setActiveObject(sel);
         canvasInstance.requestRenderAll();
       }
+
+      // Copy
       if (e.ctrlKey && e.key.toLowerCase() === "c") {
         e.preventDefault();
         const active = canvasInstance.getActiveObject();
-        if (active) active.clone().then((cloned: fabric.Object) => (window as any)._clipboard = cloned);
+        if (active) {
+          active.clone().then((cloned: fabric.Object) => {
+            (window as any)._clipboard = cloned;
+          });
+        }
       }
+
+      // Paste
       if (e.ctrlKey && e.key.toLowerCase() === "v") {
         e.preventDefault();
         const clipboard = (window as any)._clipboard;
         if (clipboard) {
           clipboard.clone().then((clonedObj: fabric.Object) => {
-            clonedObj.set({ left: (clonedObj.left ?? 0) + 20, top: (clonedObj.top ?? 0) + 20 });
+            clonedObj.set({
+              left: (clonedObj.left ?? 0) + 20,
+              top: (clonedObj.top ?? 0) + 20
+            });
             canvasInstance.add(clonedObj);
             canvasInstance.setActiveObject(clonedObj);
             canvasInstance.requestRenderAll();
@@ -481,171 +632,7 @@ const CanvasEditor: React.FC = () => {
     setResizeDialogOpen(false);
   };
 
-  // Save current canvas to page
-  const saveCurrentCanvasToPage = async (index: number) => {
-    if (!canvasInstance) return;
-    try {
-      const json = canvasInstance.toJSON();
-      const thumbnail = await generateThumbnailFromCanvas(canvasInstance);
-      setPages((prev) =>
-        prev.map((p, i) => (i === index ? { ...p, fabricJSON: json, thumbnail } : p))
-      );
-    } catch (err) {
-      console.warn("Thumbnail / save for page failed", err);
-      setPages((prev) =>
-        prev.map((p, i) => (i === index ? { ...p, fabricJSON: canvasInstance?.toJSON() || null } : p))
-      );
-    }
-  };
 
-  // FIXED: Load page into canvas with proper state restoration
-  // const loadPageToCanvas = (index: number) => {
-  //   const page = pages[index];
-  //   if (!canvasInstance) return;
-
-  //   // Save current page before switching
-  //   saveCurrentCanvasToPage(currentPage);
-
-  //   const locked = page?.locked || false;
-  //   canvasInstance.selection = !locked;
-  //   canvasInstance.skipTargetFind = locked;
-
-  //   // Clear canvas
-  //   canvasInstance.clear();
-  //    canvasInstance.backgroundColor = 'white'; // Reset background
-  //   canvasInstance.renderAll();
-
-  //   if (page && page.fabricJSON) {
-  //     try {
-  //       canvasInstance.loadFromJSON(page.fabricJSON, () => {
-  //         //  Restore canvas size from saved state
-  //         if (page.fabricJSON.width) {
-  //           canvasInstance.setWidth(page.fabricJSON.width);
-  //         }
-  //         if (page.fabricJSON.height) {
-  //           canvasInstance.setHeight(page.fabricJSON.height);
-  //         }
-
-  //         // Restore background
-  //         if (page.fabricJSON.background) {
-  //           canvasInstance.backgroundColor = page.fabricJSON.background;
-  //         }
-
-  //         // Apply lock state to objects
-  //         canvasInstance.getObjects().forEach((obj) => {
-  //           (obj as any).selectable = !locked;
-  //           (obj as any).evented = !locked;
-  //         });
-
-  //         canvasInstance.renderAll();
-  //         console.log(`Page ${index + 1} loaded with ${canvasInstance.getObjects().length} objects`);
-  //       });
-  //     } catch (err) {
-  //       console.error(' Failed to load page JSON:', err);
-  //       canvasInstance.backgroundColor = 'white';
-  //       canvasInstance.renderAll();
-  //     }
-  //   } else {
-  //     // Empty page
-  //     canvasInstance.backgroundColor = 'white';
-  //     canvasInstance.renderAll();
-  //   }
-
-  //   setCurrentPage(index);
-  //   setSelectedObject(null);
-  // };
-
-
-  // ✅ FIXED: Simplified load with better error handling
-  const loadPageToCanvas = (index: number) => {
-    if (!canvasInstance) {
-      console.warn('Canvas not ready yet, skipping load');
-      return;
-    }
-
-    const page = pages[index];
-    if (!page) {
-      console.error(`Page ${index} not found`);
-      return;
-    }
-
-    console.log(`Loading page ${index + 1}/${pages.length}`);
-
-    // Save current page before switching (only if different page)
-    if (index !== currentPage) {
-      saveCurrentCanvasToPage(currentPage);
-    }
-
-    const locked = page?.locked || false;
-    canvasInstance.selection = !locked;
-    canvasInstance.skipTargetFind = locked;
-
-    // CRITICAL: Clear canvas completely first
-    canvasInstance.clear();
-    canvasInstance.backgroundColor = 'white';
-    canvasInstance.renderAll();
-
-    if (page && page.fabricJSON) {
-      try {
-        // Parse fabricJSON if it's a string
-        let jsonData = page.fabricJSON;
-        if (typeof jsonData === 'string') {
-          try {
-            jsonData = JSON.parse(jsonData);
-          } catch (e) {
-            console.error('Failed to parse fabricJSON string:', e);
-            jsonData = { version: "5.3.0", objects: [], background: "white" };
-          }
-        }
-
-        //  Ensure we have valid JSON data
-        if (!jsonData || typeof jsonData !== 'object') {
-          console.error('Invalid fabricJSON data');
-          canvasInstance.backgroundColor = 'white';
-          canvasInstance.renderAll();
-          setCurrentPage(index);
-          setSelectedObject(null);
-          return;
-        }
-
-        // Load JSON into canvas
-        canvasInstance.loadFromJSON(jsonData, () => {
-          // Restore canvas size from saved state
-          if (jsonData.width && jsonData.height) {
-            canvasInstance.setWidth(jsonData.width);
-            canvasInstance.setHeight(jsonData.height);
-            setCanvasSize({ width: jsonData.width, height: jsonData.height });
-          }
-
-          // Restore background
-          if (jsonData.background) {
-            canvasInstance.backgroundColor = jsonData.background;
-          }
-
-          // Apply lock state to objects
-          canvasInstance.getObjects().forEach((obj) => {
-            (obj as any).selectable = !locked;
-            (obj as any).evented = !locked;
-          });
-
-          canvasInstance.renderAll();
-          console.log(`Page ${index + 1} loaded: ${canvasInstance.getObjects().length} objects, size: ${canvasInstance.width}x${canvasInstance.height}`);
-        });
-      } catch (err) {
-        console.error('Failed to load page JSON:', err);
-        canvasInstance.backgroundColor = 'white';
-        canvasInstance.renderAll();
-      }
-    } else {
-      // Empty page
-      console.log(`Loading empty page ${index + 1}`);
-      canvasInstance.backgroundColor = 'white';
-      canvasInstance.renderAll();
-    }
-
-    setCurrentPage(index);
-    setSelectedObject(null);
-  };
   // Generate thumbnail
   const generateThumbnailFromCanvas = async (canvas: fabric.Canvas) => {
     try {
@@ -657,383 +644,371 @@ const CanvasEditor: React.FC = () => {
     }
   };
 
-  // FIXED: Add new page with proper state handling
-  // const handleAddPage = async (insertAtIndex?: number) => {
-  //   console.log('Adding new page...', {
-  //     currentPage: currentPage + 1,
-  //     totalPages: pages.length,
-  //     insertAtIndex: insertAtIndex !== undefined ? insertAtIndex + 1 : 'end'
-  //   });
+  //new 
+const handleCanvasReady = (pageId: string, canvas: fabric.Canvas) => {
+  console.log(` Registering canvas for page: ${pageId}`);
+  
+  // FIX: Check if already exists, dispose old one
+  const existingCanvas = canvases.get(pageId);
+  if (existingCanvas) {
+    console.log(` Canvas already exists for ${pageId}, disposing old one`);
+    try {
+      if (existingCanvas.upperCanvasEl) {
+        existingCanvas.off();
+      }
+      existingCanvas.clear();
+      if (existingCanvas.dispose) {
+        existingCanvas.dispose();
+      }
+    } catch (e) {
+      console.warn('Old canvas disposal error:', e);
+    }
+  }
 
-  //   // STEP 1: Save current page first
-  //   if (canvasInstance) {
-  //     await saveCurrentCanvasToPage(currentPage);
-  //     console.log(`Saved page ${currentPage + 1} before adding new page`);
-  //   }
+  // Register new canvas
+  setCanvases(prev => {
+    const updated = new Map(prev);
+    updated.set(pageId, canvas);
+    return updated;
+  });
 
-  //   //  STEP 2: Create new blank page
-  //   const newPage: PageItem = {
-  //     id: uuidv4(),
-  //     name: `Page ${pages.length + 1}`,
-  //     fabricJSON: {
-  //       version: "5.3.0",
-  //       objects: [],
-  //       background: "white",
-  //       width: canvasInstance?.width || 800,
-  //       height: canvasInstance?.height || 600,
-  //     },
-  //     thumbnail: null,
-  //     locked: false,
-  //   };
+  // Create command manager
+  const mgr = new CommandManager(canvas);
+  setManagers(prev => {
+    const updated = new Map(prev);
+    updated.set(pageId, mgr);
+    return updated;
+  });
 
-  //   // STEP 3: Calculate new page index
-  //   const newIndex = typeof insertAtIndex === "number" ? insertAtIndex + 1 : pages.length;
+  // Delay auto-save setup to prevent immediate triggers
+  setTimeout(() => {
+    canvas.on('object:modified', () => triggerAutoSave(pageId));
+    canvas.on('object:added', () => triggerAutoSave(pageId));
+    canvas.on('object:removed', () => triggerAutoSave(pageId));
+  }, 500);
 
-  //   // STEP 4: Update pages array
-  //   setPages((prev) => {
-  //     const copy = [...prev];
-  //     if (typeof insertAtIndex === "number") {
-  //       copy.splice(insertAtIndex + 1, 0, newPage);
-  //     } else {
-  //       copy.push(newPage);
-  //     }
-  //     console.log(`New page added at index ${newIndex}, total pages: ${copy.length}`);
-  //     return copy;
-  //   });
+  // Selection tracking
+  canvas.on('selection:created', (e) => {
+    if (e.selected && e.selected[0]) {
+      setSelectedObject(e.selected[0]);
+    }
+  });
 
-  //   // STEP 5: Wait for state update, then switch to new page
-  //   setTimeout(() => {
-  //     if (!canvasInstance) {
-  //       console.error(' Canvas not available');
-  //       return;
-  //     }
+  canvas.on('selection:updated', (e) => {
+    if (e.selected && e.selected[0]) {
+      setSelectedObject(e.selected[0]);
+    }
+  });
 
-  //     // Set current page index
-  //     setCurrentPage(newIndex);
+  canvas.on('selection:cleared', () => {
+    setSelectedObject(null);
+  });
 
-  //     // Clear canvas for new blank page
-  //     canvasInstance.clear();
-  //     canvasInstance.backgroundColor = 'white';
-  //     canvasInstance.renderAll();
+  console.log(`Canvas registered for page: ${pageId}`);
+};
 
-  //     console.log(` New blank page ${newIndex + 1} ready`);
+  // NEW: Auto-save with debounce
+const triggerAutoSave = (pageId: string) => {
+  // FIX: Don't auto-save during template load
+  if (isLoadingProject) {
+    console.log('⏸Skipping auto-save during load');
+    return;
+  }
+  
+  if (autoSaveTimers.current[pageId]) {
+    clearTimeout(autoSaveTimers.current[pageId]);
+  }
 
-  //     //  STEP 6: Scroll to new page
-  //     setTimeout(() => {
-  //       pageRefs.current[newPage.id]?.scrollIntoView({
-  //         behavior: "smooth",
-  //         block: "nearest",
-  //         inline: "center"
-  //       });
-  //     }, 100);
-  //   }, 200);
-  // };
+  autoSaveTimers.current[pageId] = setTimeout(() => {
+    savePageData(pageId);
+  }, 1500);
+};
 
+  //  NEW: Save individual page
+  const savePageData = (pageId: string) => {
+    const canvas = canvases.get(pageId);
+    if (!canvas) return;
 
+    const fabricJSON = canvas.toJSON();
+    let thumbnail: string | null = null;
 
-  const handleAddPage = async (insertAtIndex?: number) => {
-    console.log('Adding new page...', {
-      currentPage: currentPage + 1,
-      totalPages: pages.length,
-      insertPosition: 'below current page'
-    });
-
-    // STEP 1: Save current page first
-    if (canvasInstance) {
-      await saveCurrentCanvasToPage(currentPage);
-      console.log(`Saved page ${currentPage + 1} before adding new page`);
+    try {
+      thumbnail = canvas.toDataURL({
+        format: 'png',
+        quality: 0.5,
+        multiplier: 0.25
+      });
+    } catch (err) {
+      console.warn('Thumbnail generation failed:', err);
     }
 
-    // STEP 2: Create new blank page
-    const newPage: PageItem = {
-      id: uuidv4(),
-      name: `Page ${pages.length + 1}`,
-      fabricJSON: {
-        version: "5.3.0",
-        objects: [],
-        background: "white",
-        width: canvasInstance?.width || 800,
-        height: canvasInstance?.height || 600,
-      },
-      thumbnail: null,
-      locked: false,
-    };
+    setPages(prev => prev.map(p =>
+      p.id === pageId
+        ? { ...p, fabricJSON, thumbnail }
+        : p
+    ));
 
-    // STEP 3: ALWAYS add below current page (Canva style)
-    const newIndex = currentPage + 1;
-
-    // STEP 4: Update pages array
-    setPages((prev) => {
-      const copy = [...prev];
-      copy.splice(newIndex, 0, newPage);
-      console.log(`New page added at index ${newIndex}, total pages: ${copy.length}`);
-      return copy;
-    });
-
-    // STEP 5: Wait for state update, then switch to new page
-    setTimeout(() => {
-      if (!canvasInstance) {
-        console.error('Canvas not available');
-        return;
-      }
-
-      // Set current page index
-      setCurrentPage(newIndex);
-
-      // Clear canvas for new blank page
-      canvasInstance.clear();
-      canvasInstance.backgroundColor = 'white';
-      canvasInstance.renderAll();
-
-      console.log(`New blank page ${newIndex + 1} ready for editing`);
-    }, 200);
+    console.log(`Auto-saved page: ${pageId}`);
   };
-  const handleDuplicatePage = async () => {
-    if (!canvasInstance) return;
-    await saveCurrentCanvasToPage(currentPage);
 
-    const source = pages[currentPage];
+  //  NEW: Update page (called from PageCanvas)
+  const handlePageUpdate = (pageId: string) => {
+    triggerAutoSave(pageId);
+  };
+const handleAddPage = () => {
+  const newPage: PageItem = {
+    id: uuidv4(),
+    name: `Page ${pages.length + 1}`,
+    fabricJSON: {
+      version: "5.3.0",
+      objects: [],
+      background: "white",
+      width: canvasSize.width,
+      height: canvasSize.height,
+    },
+    thumbnail: null,
+    locked: false,
+  };
+
+  // FIX: Add page and wait for React to render
+  setPages(prev => {
+    const copy = [...prev];
+    copy.splice(activePageIndex + 1, 0, newPage);
+    return copy;
+  });
+
+  // Wait for render, then activate
+  setTimeout(() => {
+    setActivePageIndex(activePageIndex + 1);
+    setActivePageId(newPage.id);
+    console.log(` Added page ${activePageIndex + 2}`);
+  }, 100);
+};
+
+  // UPDATED: Duplicate page
+  const handleDuplicatePage = (index: number) => {
+    const source = pages[index];
+    const canvas = canvases.get(source.id);
+
+    let fabricJSON = source.fabricJSON;
+    if (canvas) {
+      fabricJSON = canvas.toJSON();
+    }
+
     const copyPage: PageItem = {
       id: uuidv4(),
       name: `${source.name} (copy)`,
-      fabricJSON: source.fabricJSON ? JSON.parse(JSON.stringify(source.fabricJSON)) : null,
+      fabricJSON: fabricJSON ? JSON.parse(JSON.stringify(fabricJSON)) : null,
       thumbnail: source.thumbnail,
-      locked: source.locked || false,
+      locked: false,
     };
-    setPages((prev) => {
+
+    setPages(prev => {
       const copy = [...prev];
-      copy.splice(currentPage + 1, 0, copyPage);
+      copy.splice(index + 1, 0, copyPage);
       return copy;
     });
-    setTimeout(() => {
-      loadPageToCanvas(currentPage + 1);
-      pageRefs.current[copyPage.id]?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    }, 50);
+
+    setActivePageIndex(index + 1);
+    console.log(`Duplicated page ${index + 1}`);
   };
 
-  const handleDeletePage = async (index?: number) => {
-    const idx = typeof index === "number" ? index : currentPage;
+  //  UPDATED: Delete page
+  const handleDeletePage = (index: number) => {
     if (pages.length === 1) {
-      if (!confirm("Delete this page? Your canvas will become blank.")) return;
-      canvasInstance?.clear();
-      setPages([{ id: uuidv4(), name: "Page 1", fabricJSON: null, thumbnail: null, locked: false }]);
-      setCurrentPage(0);
+      alert("Cannot delete the last page!");
       return;
     }
-    if (!confirm("Delete this page? This action cannot be undone.")) return;
 
-    await saveCurrentCanvasToPage(currentPage);
+    if (!confirm(`Delete page ${index + 1}? This cannot be undone.`)) return;
 
-    setPages((prev) => prev.filter((_, i) => i !== idx));
-    const nextIndex = Math.max(0, idx - 1);
-    setTimeout(() => loadPageToCanvas(nextIndex), 50);
-  };
+    const pageId = pages[index].id;
+    const canvas = canvases.get(pageId);
 
-  const handleToggleLockPage = async (index?: number) => {
-    const idx = typeof index === "number" ? index : currentPage;
-    if (canvasInstance) await saveCurrentCanvasToPage(currentPage);
-    setPages((prev) => prev.map((p, i) => (i === idx ? { ...p, locked: !p.locked } : p)));
-    if (idx === currentPage && canvasInstance) {
-      const locked = !pages[idx].locked;
-      canvasInstance.selection = !locked;
-      canvasInstance.getObjects().forEach((obj) => {
-        (obj as any).selectable = !locked;
-        (obj as any).evented = !locked;
+    // Dispose canvas and manager
+    if (canvas) {
+      canvas.dispose();
+      setCanvases(prev => {
+        const updated = new Map(prev);
+        updated.delete(pageId);
+        return updated;
       });
-      canvasInstance.requestRenderAll();
-    }
-  };
-
-  // const handleSwitchToPage = async (index: number) => {
-  //   if (index === currentPage) return;
-
-  //   // ✅ Save current page before switching
-  //   if (canvasInstance) {
-  //     await saveCurrentCanvasToPage(currentPage);
-  //     console.log(`💾 Auto-saved page ${currentPage + 1} before switching`);
-  //   }
-
-  //   const pageId = pages[index].id;
-  //   pageRefs.current[pageId]?.scrollIntoView({
-  //     behavior: "smooth",
-  //     block: "center",
-  //   });
-
-  //   loadPageToCanvas(index);
-  // };
-
-
-  const handleSwitchToPage = async (index: number) => {
-    if (index === currentPage) return;
-
-    // ✅ Save current page before switching
-    if (canvasInstance) {
-      await saveCurrentCanvasToPage(currentPage);
-      console.log(`💾 Auto-saved page ${currentPage + 1} before switching`);
     }
 
-    // ✅ NO SCROLL - Direct edit in place (Canva style)
-    loadPageToCanvas(index);
+    setManagers(prev => {
+      const updated = new Map(prev);
+      updated.delete(pageId);
+      return updated;
+    });
+
+    setPages(prev => prev.filter((_, i) => i !== index));
+
+    // Adjust active index
+    if (activePageIndex >= index) {
+      setActivePageIndex(Math.max(0, activePageIndex - 1));
+    }
+
+    console.log(`Deleted page ${index + 1}`);
   };
-  // Save handler
+
+  //  UPDATED: Toggle lock
+  const handleToggleLockPage = (index: number) => {
+    setPages(prev => prev.map((p, i) =>
+      i === index ? { ...p, locked: !p.locked } : p
+    ));
+
+    console.log(` Toggled lock for page ${index + 1}`);
+  };
   const handleSave = async () => {
-    if (!canvasInstance || !user) return;
+  if (!user) return;
 
-    if (!templateName.trim()) {
-      setSnackbar({
-        open: true,
-        message: "Please enter a template name",
-        severity: "error",
-      });
-      return;
-    }
+  if (!templateName.trim()) {
+    setSnackbar({
+      open: true,
+      message: "Please enter a template name",
+      severity: "error",
+    });
+    return;
+  }
 
-    setSaving(true);
+  setSaving(true);
 
-    try {
-      // ✅ CRITICAL: Save current canvas to current page FIRST
-      await saveCurrentCanvasToPage(currentPage);
-      console.log(`💾 Saved current page ${currentPage + 1} before saving project`);
+  try {
+    console.log(`Saving project with ${pages.length} pages...`);
 
-      // ✅ Wait for state to update
-      await new Promise(resolve => setTimeout(resolve, 100));
+    // Save all canvases WITH OBJECTS
+    const pagesPayload = await Promise.all(
+      pages.map(async (page) => {
+        const canvas = canvases.get(page.id);
 
-      // ✅ Now generate payload with ALL pages (using updated state)
-      const pagesPayload = await Promise.all(
-        pages.map(async (p, idx) => {
-          let fabricJSON = p.fabricJSON;
-          let thumbnail = p.thumbnail;
+        let fabricJSON = page.fabricJSON;
+        let thumbnail = page.thumbnail;
 
-          // ✅ If this is current page, get fresh data from canvas
-          if (idx === currentPage && canvasInstance) {
-            fabricJSON = canvasInstance.toJSON();
-            try {
-              thumbnail = await generateThumbnailFromCanvas(canvasInstance);
-            } catch (err) {
-              console.warn(`Failed to generate thumbnail for page ${idx + 1}`);
-            }
+        // CRITICAL: Get fresh data from canvas
+        if (canvas) {
+          fabricJSON = canvas.toJSON();
+          
+          // Verify objects exist
+          console.log(`Page ${page.name}: ${fabricJSON?.objects?.length || 0} objects`);
+          
+          try {
+            thumbnail = canvas.toDataURL({
+              format: 'png',
+              quality: 0.5,
+              multiplier: 0.25
+            });
+          } catch (err) {
+            console.warn(`Failed to generate thumbnail for ${page.name}`);
           }
+        } else {
+          console.warn(`No canvas for page ${page.name}, using stored data`);
+        }
 
-          // ✅ Ensure fabricJSON has proper structure
-          if (!fabricJSON || typeof fabricJSON !== 'object') {
-            fabricJSON = {
-              version: "5.3.0",
-              objects: [],
-              background: "white",
-              width: canvasInstance?.width || 800,
-              height: canvasInstance?.height || 600,
-            };
-          }
-
-          // ✅ Ensure width/height in fabricJSON
-          if (!fabricJSON.width) fabricJSON.width = canvasInstance?.width || 800;
-          if (!fabricJSON.height) fabricJSON.height = canvasInstance?.height || 600;
-
-          return {
-            id: p.id,
-            name: p.name,
-            fabricJSON: fabricJSON,
-            thumbnail: thumbnail,
-            locked: p.locked || false,
+        // Ensure valid fabricJSON with objects
+        if (!fabricJSON || typeof fabricJSON !== 'object') {
+          fabricJSON = {
+            version: "5.3.0",
+            objects: [],
+            background: "white",
+            width: canvasSize.width,
+            height: canvasSize.height,
           };
-        })
-      );
-
-      console.log(`📦 Saving ${pagesPayload.length} pages:`, pagesPayload.map((p, i) =>
-        `Page ${i + 1}: ${p.fabricJSON?.objects?.length || 0} objects, has thumbnail: ${!!p.thumbnail}`
-      ));
-
-      const canvasJSON = canvasInstance.toJSON();
-      let thumbnail: string | null | undefined;
-      try {
-        thumbnail = await generateThumbnailFromCanvas(canvasInstance);
-      } catch { }
-
-      const canvasData: any = {
-        name: templateName,
-        category: (user && (user as any).role === "ADMIN") ? (templateCategory || undefined) : undefined,
-        size: { width: canvasInstance.width, height: canvasInstance.height },
-        elements: canvasJSON.objects,
-        objects: canvasJSON.objects,
-        background: (canvasJSON as any).background,
-        fabricJSON: canvasJSON,
-        json: canvasJSON,
-        thumbnail,
-        pages: pagesPayload, // ✅ All pages with fabricJSON
-      };
-
-      if (isAdmin) {
-        if (currentTemplateId && isEditingTemplate) {
-          await templateApi.updateTemplate(currentTemplateId, canvasData);
-          setSnackbar({
-            open: true,
-            message: "Template updated successfully!",
-            severity: "success"
-          });
-        } else {
-          const response = await templateApi.createTemplate(canvasData);
-          setCurrentTemplateId(response.id);
-          setIsEditingTemplate(true);
-          setSnackbar({
-            open: true,
-            message: "Template created successfully!",
-            severity: "success"
-          });
         }
+
+        if (!fabricJSON.width) fabricJSON.width = canvasSize.width;
+        if (!fabricJSON.height) fabricJSON.height = canvasSize.height;
+
+        return {
+          id: page.id,
+          name: page.name,
+          fabricJSON: fabricJSON,
+          thumbnail: thumbnail,
+          locked: page.locked || false,
+        };
+      })
+    );
+
+    // Verify data before saving
+    console.log(` Prepared ${pagesPayload.length} pages for save:`);
+    pagesPayload.forEach((p, i) => {
+      console.log(`Page ${i + 1}: ${p.fabricJSON?.objects?.length || 0} objects`);
+    });
+
+    const canvasData: any = {
+      name: templateName,
+      category: isAdmin ? (templateCategory || undefined) : undefined,
+      size: canvasSize,
+      pages: pagesPayload, 
+      thumbnail: pagesPayload[0]?.thumbnail,
+    };
+
+    // API calls
+    if (isAdmin) {
+      if (currentTemplateId && isEditingTemplate) {
+        await templateApi.updateTemplate(currentTemplateId, canvasData);
+        setSnackbar({
+          open: true,
+          message: "Template updated successfully!",
+          severity: "success"
+        });
       } else {
-        if (baseAdminTemplateId && !isEditingTemplate) {
-          const copiedTemplate = await templateApi.copyTemplateToMyProjects(baseAdminTemplateId);
-          const updatedTemplate = await templateApi.updateUserTemplate(copiedTemplate.id, canvasData);
-          setCurrentTemplateId(updatedTemplate.id);
-          setIsEditingTemplate(true);
-          setBaseAdminTemplateId(null);
-          setSnackbar({
-            open: true,
-            message: "Template copied to your projects and saved!",
-            severity: "success"
-          });
-        } else if (currentTemplateId && isEditingTemplate) {
-          await templateApi.updateUserTemplate(currentTemplateId, canvasData);
-          setSnackbar({
-            open: true,
-            message: "Your project updated successfully!",
-            severity: "success"
-          });
-        } else {
-          const response = await templateApi.createUserTemplate({
-            ...canvasData,
-            baseTemplateId: undefined,
-          });
-          setCurrentTemplateId(response.id);
-          setIsEditingTemplate(true);
-          setSnackbar({
-            open: true,
-            message: "New project saved successfully!",
-            severity: "success"
-          });
-        }
+        const response = await templateApi.createTemplate(canvasData);
+        setCurrentTemplateId(response.id);
+        setIsEditingTemplate(true);
+        setSnackbar({
+          open: true,
+          message: "Template created successfully!",
+          severity: "success"
+        });
       }
-
-      setSaveDialogOpen(false);
-
-      // ✅ Trigger refresh for MyProjectsPanel
-      window.dispatchEvent(new Event('refreshProjects'));
-
-    } catch (error: any) {
-      console.error('❌ Save error:', error);
-      setSnackbar({
-        open: true,
-        message: error?.response?.data?.message || `Save failed. Check server logs.`,
-        severity: "error"
-      });
-    } finally {
-      setSaving(false);
+    } else {
+      if (baseAdminTemplateId && !isEditingTemplate) {
+        const copiedTemplate = await templateApi.copyTemplateToMyProjects(baseAdminTemplateId);
+        const updatedTemplate = await templateApi.updateUserTemplate(copiedTemplate.id, canvasData);
+        setCurrentTemplateId(updatedTemplate.id);
+        setIsEditingTemplate(true);
+        setBaseAdminTemplateId(null);
+        setSnackbar({
+          open: true,
+          message: "Template copied and saved!",
+          severity: "success"
+        });
+      } else if (currentTemplateId && isEditingTemplate) {
+        await templateApi.updateUserTemplate(currentTemplateId, canvasData);
+        setSnackbar({
+          open: true,
+          message: "Project updated successfully!",
+          severity: "success"
+        });
+      } else {
+        const response = await templateApi.createUserTemplate({
+          ...canvasData,
+          baseTemplateId: undefined,
+        });
+        setCurrentTemplateId(response.id);
+        setIsEditingTemplate(true);
+        setSnackbar({
+          open: true,
+          message: "Project saved successfully!",
+          severity: "success"
+        });
+      }
     }
-  };
 
+    setSaveDialogOpen(false);
+    window.dispatchEvent(new Event('refreshProjects'));
+
+  } catch (error: any) {
+    console.error(' Save error:', error);
+    setSnackbar({
+      open: true,
+      message: error?.response?.data?.message || "Save failed. Check console.",
+      severity: "error"
+    });
+  } finally {
+    setSaving(false);
+  }
+};
   const handleSaveClick = () => {
     if (!isAuthenticated) {
       setSnackbar({
@@ -1055,25 +1030,64 @@ const CanvasEditor: React.FC = () => {
     setSaveDialogOpen(true);
   };
 
-  const handleNewTemplate = () => {
-    if (!canvasInstance) return;
+ const handleNewTemplate = () => {
+  if (confirm("Create a new blank template? Unsaved changes will be lost.")) {
+    // FIXED: Safe disposal of all canvases
+    canvases.forEach((canvas, pageId) => {
+      try {
+        console.log(` Disposing canvas: ${pageId}`);
+        
+        // Check if canvas elements exist
+        if (canvas.upperCanvasEl) {
+          canvas.off(); // Remove all listeners
+        }
+        
+        canvas.clear(); // Clear objects
+        
+        if (canvas.dispose) {
+          canvas.dispose(); // Dispose canvas
+        }
+      } catch (error) {
+        console.warn(`Canvas disposal warning for ${pageId}:`, error);
+      }
+    });
 
-    if (confirm("Create a new blank template? Unsaved changes will be lost.")) {
-      canvasInstance.clear();
-      setCurrentTemplateId(null);
-      setTemplateName("");
-      setIsEditingTemplate(false);
-      setPages([{ id: uuidv4(), name: "Page 1", fabricJSON: null, thumbnail: null, locked: false }]);
-      setCurrentPage(0);
-      setSnackbar({
-        open: true,
-        message: "New blank canvas created",
-        severity: "success",
-      });
-    }
-  };
+    setCanvases(new Map());
+    setManagers(new Map());
 
-  // ✅ FIXED: Handlers with SVG double-click and background image support
+    // Reset to single blank page
+    const blankPage: PageItem = {
+      id: uuidv4(),
+      name: "Page 1",
+      fabricJSON: {
+        version: "5.3.0",
+        objects: [],
+        background: "white",
+        width: canvasSize.width,
+        height: canvasSize.height,
+      },
+      thumbnail: null,
+      locked: false
+    };
+
+    setPages([blankPage]);
+    setActivePageIndex(0);
+    setActivePageId(blankPage.id);
+    setCurrentTemplateId(null);
+    setTemplateName("");
+    setIsEditingTemplate(false);
+    setSelectedObject(null);
+    setContextMenu(null);
+
+    setSnackbar({
+      open: true,
+      message: "New blank canvas created",
+      severity: "success",
+    });
+  }
+};
+
+  //  FIXED: Handlers with SVG double-click and background image support
   const handlers = {
     onAddText: (textConfig?: {
       text: string;
@@ -1081,7 +1095,11 @@ const CanvasEditor: React.FC = () => {
       fontWeight: string | number;
       fontFamily?: string;
     }) => {
-      if (!canvasInstance) return;
+      const canvas = canvases.get(pages[activePageIndex]?.id);
+      if (!canvas) {
+        console.warn('No active canvas');
+        return;
+      }
 
       const config = textConfig || {
         text: "New Text",
@@ -1090,6 +1108,7 @@ const CanvasEditor: React.FC = () => {
         fontFamily: "Inter",
       };
 
+      // Font loading logic (keep existing)
       if (config.fontFamily && config.fontFamily !== "Inter") {
         const fontFamily = config.fontFamily.replace(/ /g, "+");
         const existingLink = document.querySelector(`link[href*="${fontFamily}"]`);
@@ -1112,71 +1131,28 @@ const CanvasEditor: React.FC = () => {
           width: 400,
         });
 
-        canvasInstance.add(textbox);
-        canvasInstance.setActiveObject(textbox);
-        canvasInstance.requestRenderAll();
+        canvas.add(textbox);
+        canvas.setActiveObject(textbox);
+        canvas.requestRenderAll();
         setSelectedObject(textbox);
         setPropertyTab("text");
       }, config.fontFamily && config.fontFamily !== "Inter" ? 300 : 0);
     },
 
-
-    // onAddUpload: (data: any) => {
-    //   if (!canvasInstance) return;
-
-    //   //  Handle SVG
-    //   if (data.type === "svg") {
-    //     fabric.loadSVGFromString(data.data).then(({ objects, options }) => {
-    //       //  Filter out null values
-    //       const validObjects = objects.filter((obj): obj is fabric.FabricObject => obj !== null);
-
-    //       if (validObjects.length === 0) {
-    //         console.error(' No valid SVG objects found');
-    //         return;
-    //       }
-
-    //       const svgGroup = fabric.util.groupSVGElements(validObjects, options);
-
-    //       // Scale if too large
-    //       const maxWidth = canvasInstance.width! * 0.5;
-    //       const maxHeight = canvasInstance.height! * 0.5;
-
-    //       if (svgGroup.width! > maxWidth || svgGroup.height! > maxHeight) {
-    //         const scale = Math.min(maxWidth / svgGroup.width!, maxHeight / svgGroup.height!);
-    //         svgGroup.scale(scale);
-    //       }
-
-    //       // Center
-    //       svgGroup.set({
-    //         left: (canvasInstance.width! - svgGroup.getScaledWidth()) / 2,
-    //         top: (canvasInstance.height! - svgGroup.getScaledHeight()) / 2,
-    //       });
-
-    //       canvasInstance.add(svgGroup);
-    //       canvasInstance.setActiveObject(svgGroup);
-    //       canvasInstance.requestRenderAll();
-    //       setSelectedObject(svgGroup);
-    //     }).catch((error) => {
-    //       console.error('❌ Failed to load SVG:', error);
-    //       setSnackbar({
-    //         open: true,
-    //         message: "Failed to load SVG element",
-    //         severity: "error"
-    //       });
-    //     });
-    //     return;
-    //   }
-
     onAddUpload: (data: any) => {
-      if (!canvasInstance) return;
+      const canvas = canvases.get(pages[activePageIndex]?.id);
+      if (!canvas) {
+        console.warn('No active canvas');
+        return;
+      }
 
-      // ✅ FIXED SVG UPLOAD
+      // FIXED SVG UPLOAD
       if (data.type === "svg") {
         fabric.loadSVGFromString(data.data).then(({ objects, options }) => {
           const validObjects = objects.filter((obj): obj is fabric.FabricObject => obj !== null);
 
           if (validObjects.length === 0) {
-            console.error('❌ No valid SVG objects found');
+            console.error('No valid SVG objects found');
             setSnackbar({
               open: true,
               message: "SVG ke andar koi objects nahi hain",
@@ -1185,7 +1161,7 @@ const CanvasEditor: React.FC = () => {
             return;
           }
 
-          // ✅ KEY FIX: Store original colors before grouping
+          // Store original colors
           const colorMap = new Map<string, number>();
           validObjects.forEach((obj, idx) => {
             const fill = obj.fill;
@@ -1193,28 +1169,20 @@ const CanvasEditor: React.FC = () => {
               if (!colorMap.has(fill)) {
                 colorMap.set(fill, idx);
               }
-              console.log(`Path ${idx}: Original Color = ${fill}`);
             }
           });
 
           const svgGroup = fabric.util.groupSVGElements(validObjects, options);
 
-          // ✅ KEY FIX: Mark as editable SVG and store all info
+          // Mark as editable SVG
           (svgGroup as any).isEditableSVG = true;
           (svgGroup as any).svgPaths = validObjects;
           (svgGroup as any).svgColorMap = colorMap;
           (svgGroup as any).originalColors = new Map(colorMap);
 
-          console.log('✅ SVG Group Setup:', {
-            isEditableSVG: true,
-            pathCount: validObjects.length,
-            uniqueColors: colorMap.size,
-            colors: Array.from(colorMap.keys())
-          });
-
           // Scale if too large
-          const maxWidth = canvasInstance.width! * 0.5;
-          const maxHeight = canvasInstance.height! * 0.5;
+          const maxWidth = canvas.width! * 0.5;
+          const maxHeight = canvas.height! * 0.5;
 
           if (svgGroup.width! > maxWidth || svgGroup.height! > maxHeight) {
             const scale = Math.min(maxWidth / svgGroup.width!, maxHeight / svgGroup.height!);
@@ -1223,17 +1191,17 @@ const CanvasEditor: React.FC = () => {
 
           // Center on canvas
           svgGroup.set({
-            left: (canvasInstance.width! - svgGroup.getScaledWidth()) / 2,
-            top: (canvasInstance.height! - svgGroup.getScaledHeight()) / 2,
+            left: (canvas.width! - svgGroup.getScaledWidth()) / 2,
+            top: (canvas.height! - svgGroup.getScaledHeight()) / 2,
           });
 
-          canvasInstance.add(svgGroup);
-          canvasInstance.setActiveObject(svgGroup);
-          canvasInstance.requestRenderAll();
+          canvas.add(svgGroup);
+          canvas.setActiveObject(svgGroup);
+          canvas.requestRenderAll();
           setSelectedObject(svgGroup);
 
         }).catch((error) => {
-          console.error('❌ Failed to load SVG:', error);
+          console.error('Failed to load SVG:', error);
           setSnackbar({
             open: true,
             message: "SVG load nahi hua",
@@ -1243,14 +1211,13 @@ const CanvasEditor: React.FC = () => {
         return;
       }
 
-      // ✅ Handle images (background and regular)
+      // Handle images
       if (data.type === "ADD_IMAGE") {
         fabric.Image.fromURL(data.src, { crossOrigin: 'anonymous' }).then((img) => {
-          const canvasWidth = canvasInstance.width!;
-          const canvasHeight = canvasInstance.height!;
+          const canvasWidth = canvas.width!;
+          const canvasHeight = canvas.height!;
 
           if (data.isBackground) {
-            // Scale image to exactly fit canvas (no crop, no blank space)
             const scaleX = canvasWidth / img.width!;
             const scaleY = canvasHeight / img.height!;
             img.set({
@@ -1270,19 +1237,16 @@ const CanvasEditor: React.FC = () => {
             });
             (img as any).isBackground = true;
 
-            // Always add to bottom layer
-            canvasInstance.add(img);
-            // Move to bottom (type-safe)
-            const objs = canvasInstance.getObjects();
+            canvas.add(img);
+            const objs = canvas.getObjects();
             const imgIndex = objs.indexOf(img);
             if (imgIndex > -1) {
               objs.splice(imgIndex, 1);
               objs.unshift(img);
-              canvasInstance.renderAll();
+              canvas.renderAll();
             }
             setSelectedObject(null);
           } else {
-            // Regular image: scale and center
             const maxWidth = canvasWidth * 0.5;
             const maxHeight = canvasHeight * 0.5;
             if (img.width! > maxWidth || img.height! > maxHeight) {
@@ -1295,11 +1259,11 @@ const CanvasEditor: React.FC = () => {
               selectable: true,
               evented: true,
             });
-            canvasInstance.add(img);
-            canvasInstance.setActiveObject(img);
+            canvas.add(img);
+            canvas.setActiveObject(img);
             setSelectedObject(img);
           }
-          canvasInstance.requestRenderAll();
+          canvas.requestRenderAll();
         }).catch((error) => {
           setSnackbar({
             open: true,
@@ -1310,85 +1274,153 @@ const CanvasEditor: React.FC = () => {
       }
     },
     onAddShape: (payload: any) => {
-      if (payload && payload.type === "LOAD_TEMPLATE") {
-        const snapshot = canvasInstance?.toJSON();
-        const prevSize = canvasInstance ? {
-          width: canvasInstance.width,
-          height: canvasInstance.height
-        } : null;
-        const prevBg = canvasInstance?.backgroundColor;
+  if (payload && payload.type === "LOAD_TEMPLATE") {
+    const template = payload.template;
 
-        if (payload.template) {
-          const template = payload.template;
+    console.log('Loading template:', template.name);
+    console.log('Template data:', template);
 
-          // ✅ CRITICAL FIX: Set canvas size from template FIRST
-          if (canvasInstance && template.size) {
-            canvasInstance.setWidth(template.size.width || 800);
-            canvasInstance.setHeight(template.size.height || 600);
-            setCanvasSize({
-              width: template.size.width || 800,
-              height: template.size.height || 600
-            });
-          }
+    // Set loading state
+    setIsLoadingProject(true);
 
-          // If template contains pages array, load into pages state
-          if (template.pages && Array.isArray(template.pages) && template.pages.length > 0) {
-            const loadedPages: PageItem[] = template.pages.map((pg: any, i: number) => ({
-              id: pg.id || uuidv4(),
-              name: pg.name || `Page ${i + 1}`,
-              fabricJSON: pg.fabricJSON || pg.json || null,
-              thumbnail: pg.thumbnail || null,
-              locked: !!pg.locked,
-            }));
+    // Set canvas size FIRST
+    const newSize = {
+      width: template.size?.width || 800,
+      height: template.size?.height || 600
+    };
 
-            setPages(loadedPages);
-            setTimeout(() => {
-              loadPageToCanvas(0);
-            }, 50);
+    console.log(' New canvas size:', newSize);
+    setCanvasSize(newSize);
 
-            // set metadata
-            setBaseAdminTemplateId(template.createdBy && !template.userId ? template.id : null);
-            setCurrentTemplateId(template.userId ? template.id : null);
-            setTemplateName(template.name || "");
-            setIsEditingTemplate(!!template.userId);
-          }
-          else if (template.fabricJSON || template.json) {
-            // fallback: single page template
-            const single = {
-              id: template.id || uuidv4(),
-              name: template.name || "Page 1",
-              fabricJSON: template.fabricJSON || template.json || null,
-              thumbnail: template.thumbnail || null,
-              locked: false,
-            } as PageItem;
-            setPages([single]);
-            setTimeout(() => {
-              loadPageToCanvas(0);
-            }, 50);
+    // Dispose all canvases
+    canvases.forEach((canvas, pageId) => {
+      try {
+        canvas.off();
+        canvas.clear();
+        canvas.dispose();
+      } catch (e) {
+        console.warn('Disposal error:', e);
+      }
+    });
 
-            setBaseAdminTemplateId(template.createdBy && !template.userId ? template.id : null);
-            setCurrentTemplateId(template.userId ? template.id : null);
-            setTemplateName(template.name || "");
-            setIsEditingTemplate(!!template.userId);
+    setCanvases(new Map());
+    setManagers(new Map());
+
+    // BACKWARD COMPATIBILITY: Handle both formats
+    let templatePages = template.pages;
+
+    // Convert old format (elements) to new format (pages)
+    if (!templatePages && template.elements) {
+      console.log('Converting old format: elements → pages');
+      templatePages = [
+        {
+          id: uuidv4(),
+          name: 'Page 1',
+          fabricJSON: template.elements,
+          thumbnail: template.thumbnail,
+          locked: false
+        }
+      ];
+    }
+
+    // Parse pages
+    const loadedPages: PageItem[] = [];
+
+    if (templatePages && Array.isArray(templatePages) && templatePages.length > 0) {
+      templatePages.forEach((pg: any, i: number) => {
+        let fabricJSON = pg.fabricJSON || pg.json;
+
+        // Parse string JSON
+        if (typeof fabricJSON === 'string') {
+          try {
+            fabricJSON = JSON.parse(fabricJSON);
+          } catch (e) {
+            console.error(`Parse error page ${i}:`, e);
+            fabricJSON = null;
           }
         }
 
-        setAction({
-          type: "LOAD_TEMPLATE",
-          payload: {
-            template: payload.template,
-            snapshot,
-            prevSize,
-            prevBg
-          }
+        // Validate fabricJSON structure
+        if (!fabricJSON || typeof fabricJSON !== 'object') {
+          fabricJSON = {
+            version: "5.3.0",
+            objects: [],
+            background: "white",
+            width: newSize.width,
+            height: newSize.height,
+          };
+        }
+
+        //  Ensure objects array exists
+        if (!fabricJSON.objects || !Array.isArray(fabricJSON.objects)) {
+          fabricJSON.objects = [];
+        }
+
+        // Ensure dimensions
+        if (!fabricJSON.width) fabricJSON.width = newSize.width;
+        if (!fabricJSON.height) fabricJSON.height = newSize.height;
+
+        console.log(`Page ${i + 1}: ${fabricJSON.objects.length} objects`);
+
+        loadedPages.push({
+          id: pg.id || uuidv4(),
+          name: pg.name || `Page ${i + 1}`,
+          fabricJSON: fabricJSON,
+          thumbnail: pg.thumbnail || null,
+          locked: !!pg.locked,
         });
-      } else {
-        setAction({ type: "ADD_SHAPE", payload });
-      }
-    },
+      });
+    } else {
+      // No pages found - create blank page
+      console.warn(' No pages found, creating blank page');
+      loadedPages.push({
+        id: uuidv4(),
+        name: "Page 1",
+        fabricJSON: {
+          version: "5.3.0",
+          objects: [],
+          background: "white",
+          width: newSize.width,
+          height: newSize.height,
+        },
+        thumbnail: null,
+        locked: false,
+      });
+    }
 
+    console.log(` Loaded ${loadedPages.length} pages`);
 
+    // Wait for cleanup, then set pages
+    setTimeout(() => {
+      setPages(loadedPages);
+      setActivePageIndex(0);
+      setActivePageId(loadedPages[0]?.id || null);
+      setBaseAdminTemplateId(template.createdBy && !template.userId ? template.id : null);
+      setCurrentTemplateId(template.userId ? template.id : null);
+      setTemplateName(template.name || "");
+      setIsEditingTemplate(!!template.userId);
+      setActiveCategory(null);
 
+      console.log('Template loaded successfully');
+
+      setSnackbar({
+        open: true,
+        message: `Template "${template.name}" loaded`,
+        severity: "success"
+      });
+
+      // Clear loading state after render
+      setTimeout(() => {
+        setIsLoadingProject(false);
+        console.log('Loading complete');
+      }, 1000);
+    }, 100);
+
+    return;
+  } else {
+    setAction({ type: "ADD_SHAPE", payload });
+  }
+},
 
     onDelete: () => setAction({ type: "DELETE" }),
     onUndo: () => setAction({ type: "UNDO" }),
@@ -1404,13 +1436,11 @@ const CanvasEditor: React.FC = () => {
     handleDrawMode,
   };
 
-
-
   const handleColorChange = (type: 'fill' | 'stroke' | 'shadow', color: string | any) => {
     if (!canvasInstance || !manager || !selectedObject) return;
 
     const isEditableSVG = (selectedObject as any).isEditableSVG;
-    console.log('🎨 handleColorChange Called:', {
+    console.log('handleColorChange Called:', {
       type,
       color: typeof color === 'object' ? color.type : color,
       isEditableSVG,
@@ -1423,14 +1453,14 @@ const CanvasEditor: React.FC = () => {
       const oldColor = colorPickerColor;
       const svgPaths = (selectedObject as any).svgPaths || [];
 
-      console.log('🎨 SVG Color Update:', {
+      console.log('SVG Color Update:', {
         oldColor,
         newColor,
         pathCount: svgPaths.length
       });
 
       if (!svgPaths || svgPaths.length === 0) {
-        console.error('❌ No SVG paths found');
+        console.error('No SVG paths found');
         return;
       }
 
@@ -1454,14 +1484,14 @@ const CanvasEditor: React.FC = () => {
               path.set('fill', newColor);
               (path as any).editableFill = newColor;
               changedCount++;
-              debugLog.push(`✅ Path ${idx}: ${pathFill} -> ${newColor}`);
+              debugLog.push(`Path ${idx}: ${pathFill} -> ${newColor}`);
             } else {
-              debugLog.push(`❌ Path ${idx}: ${pathFill} (no match)`);
+              debugLog.push(`Path ${idx}: ${pathFill} (no match)`);
             }
           });
 
-          console.log('🎨 SVG Update Results:', debugLog);
-          console.log(`✅ Total paths changed: ${changedCount}`);
+          console.log('SVG Update Results:', debugLog);
+          console.log(`Total paths changed: ${changedCount}`);
 
           canvasInstance.requestRenderAll();
         },
@@ -1961,6 +1991,7 @@ const CanvasEditor: React.FC = () => {
       default:
         return null;
     }
+
   };
   return (
     <Box sx={{ height: "100vh", display: "flex", flexDirection: "column" }}>
@@ -2271,444 +2302,89 @@ const CanvasEditor: React.FC = () => {
 
       <PropertiesPanelWrapper>{renderPropertyPanel()}</PropertiesPanelWrapper>
       <Box sx={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        <Sidebar
-          {...sidebarHandlers}
-          onSelectProject={async (projectData: any) => {
-            console.log('🎯 CanvasEditor: onSelectProject called from Sidebar', {
-              isLoading: isLoadingProject,
-              hasCanvas: !!canvasInstance,
-              projectName: projectData.name,
-              pages: projectData.pages?.length
-            });
-
-            if (!canvasInstance) {
-              console.error('❌ Canvas not ready');
-              return;
-            }
-
-            if (isLoadingProject) {
-              console.warn('⚠️ Already loading, ignoring duplicate call');
-              return;
-            }
-
-            // ✅ Set loading flag IMMEDIATELY
-            setIsLoadingProject(true);
-
-            console.log('🔄 Starting project load:', projectData.name);
-
-            try {
-              // ✅ STEP 1: Save current state
-              await saveCurrentCanvasToPage(currentPage);
-
-              // ✅ STEP 2: Reset all states
-              setSelectedObject(null);
-              setPropertyTab("rectangle");
-              setAction(null);
-
-              // ✅ STEP 3: Clear canvas completely
-              canvasInstance.clear();
-              canvasInstance.backgroundColor = 'white';
-              canvasInstance.renderAll();
-
-              // ✅ STEP 4: Wait for clear to complete
-              await new Promise(resolve => setTimeout(resolve, 200));
-
-              // ✅ STEP 5: Set canvas size FIRST
-              const newWidth = projectData.size?.width || 800;
-              const newHeight = projectData.size?.height || 600;
-
-              console.log('📐 Setting canvas size:', { width: newWidth, height: newHeight });
-
-              canvasInstance.setWidth(newWidth);
-              canvasInstance.setHeight(newHeight);
-              setCanvasSize({ width: newWidth, height: newHeight });
-
-              // ✅ STEP 6: Parse and validate pages
-              if (!projectData.pages || !Array.isArray(projectData.pages) || projectData.pages.length === 0) {
-                console.error('❌ Invalid pages data');
-                setIsLoadingProject(false);
-                return;
-              }
-
-              const loadedPages: PageItem[] = projectData.pages.map((pg: any, i: number) => {
-                let fabricJSON = pg.fabricJSON;
-
-                // Parse if string
-                if (typeof fabricJSON === 'string') {
-                  try {
-                    fabricJSON = JSON.parse(fabricJSON);
-                  } catch (e) {
-                    console.error(`❌ Parse error page ${i}:`, e);
-                    fabricJSON = {
-                      version: "5.3.0",
-                      objects: [],
-                      background: "white",
-                      width: newWidth,
-                      height: newHeight
-                    };
-                  }
-                }
-
-                // Deep clone to prevent reference issues
-                fabricJSON = JSON.parse(JSON.stringify(fabricJSON));
-
-                // Ensure canvas size in fabricJSON
-                if (fabricJSON) {
-                  fabricJSON.width = newWidth;
-                  fabricJSON.height = newHeight;
-                }
-
-                return {
-                  id: pg.id || uuidv4(),
-                  name: pg.name || `Page ${i + 1}`,
-                  fabricJSON: fabricJSON,
-                  thumbnail: pg.thumbnail || null,
-                  locked: !!pg.locked,
-                };
-              });
-
-              console.log('📦 Parsed pages:', loadedPages.map((p, i) =>
-                `Page ${i + 1}: ${p.fabricJSON?.objects?.length || 0} objects`
-              ));
-
-              // ✅ CRITICAL FIX: Load first page DIRECTLY into canvas
-              const firstPage = loadedPages[0];
-              if (firstPage?.fabricJSON) {
-                let jsonData = firstPage.fabricJSON;
-
-                if (typeof jsonData === 'string') {
-                  jsonData = JSON.parse(jsonData);
-                }
-
-                console.log('📄 Loading first page with', jsonData.objects?.length || 0, 'objects');
-
-                // ✅ Load synchronously using Promise with proper timing
-                await new Promise<void>((resolve) => {
-                  canvasInstance.loadFromJSON(jsonData, () => {
-                    // ✅ Set dimensions first
-                    canvasInstance.setWidth(newWidth);
-                    canvasInstance.setHeight(newHeight);
-
-                    // ✅ Set background
-                    if (jsonData.background) {
-                      canvasInstance.backgroundColor = jsonData.background;
-                    }
-
-                    // ✅ CRITICAL: Wait for objects to render before counting
-                    canvasInstance.requestRenderAll();
-
-                    // ✅ Use setTimeout to ensure objects are fully loaded
-                    setTimeout(() => {
-                      const objectCount = canvasInstance.getObjects().length;
-                      console.log(`✅ Canvas loaded: ${objectCount} objects visible`);
-                      resolve();
-                    }, 50);
-                  });
-                });
-              }
-
-              // ✅ Wait a bit before setting state
-              await new Promise(resolve => setTimeout(resolve, 100));
-
-              // ✅ NOW set pages state AFTER canvas is completely loaded
-              console.log('📝 Setting pages state');
-              setPages(loadedPages);
-              setCurrentPage(0);
-
-              // ✅ Set metadata
-              setCurrentTemplateId(projectData.id);
-              setTemplateName(projectData.name || "");
-              setIsEditingTemplate(true);
-              setBaseAdminTemplateId(null);
-
-              console.log('✅ Project load complete:', {
-                pagesSet: loadedPages.length,
-                currentPage: 0,
-                canvasObjects: canvasInstance.getObjects().length
-              });
-
-            } catch (error) {
-              console.error('❌ Error loading project:', error);
-            } finally {
-              // ✅ Release loading flag after delay
-              setTimeout(() => {
-                setIsLoadingProject(false);
-                console.log('🔓 Loading flag released');
-              }, 500);
-            }
-          }}
-        />
+       <Sidebar
+  {...sidebarHandlers}
+  onSelectProject={(projectData: any) => {
+    console.log('Sidebar project selected:', projectData.name);
+    
+    //  Bas ek line!
+    handlers.onAddShape({
+      type: "LOAD_TEMPLATE",
+      template: projectData
+    });
+  }}
+/>
 
         <Box sx={{
-          flex: 1,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          backgroundColor: "#f1f5f9",
-          overflow: "auto",
-          position: "relative",
+          width: "100%",
+          gap: 3,
+          py: 3,
+          px: 2,
+          height: "calc(100vh - 64px)", 
+          overflowY: "auto",
+          overflowX: "hidden",
+          backgroundColor: "#f5f5f5"
         }}>
-          {/* Top page controls */}
-          <Box sx={{
-            position: "sticky",
-            top: 90,
-            zIndex: 120,
-            width: "100%",
-            display: "flex",
-            justifyContent: "center",
-            mb: 10
-          }}>
-            <Box sx={{
-              display: "flex",
-              gap: 1,
-              alignItems: "center",
-              background: "rgba(255,255,255,0.95)",
-              padding: "6px 8px",
-              borderRadius: 8,
-              boxShadow: "0 6px 18px rgba(0,0,0,0.08)"
-            }}>
-              <Typography variant="body2">Page {currentPage + 1} of {pages.length}</Typography>
-              <IconButton size="small" onClick={handleDuplicatePage} title="Duplicate page"><ContentCopyIcon /></IconButton>
-              <IconButton size="small" onClick={() => handleAddPage(currentPage)} title="Add page"><AddIcon /></IconButton>
-              <IconButton size="small" onClick={() => handleToggleLockPage(currentPage)} title={pages[currentPage]?.locked ? "Unlock page" : "Lock page"}>
-                {pages[currentPage]?.locked ? <LockIcon /> : <LockOpenIcon />}
-              </IconButton>
-              <IconButton size="small" onClick={() => handleDeletePage(currentPage)} title="Delete page"><DeleteIcon /></IconButton>
-            </Box>
-          </Box>
-
-          {/* ✅ VERTICAL PAGES CONTAINER (CANVA STYLE) */}
-          <Box sx={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            width: "100%",
-            gap: 2,
-            py: 2
-          }}>
-            {/* Active Canvas */}
-            <Box
-              ref={(el: HTMLDivElement | null) => {
-                if (pages[currentPage]) {
-                  pageRefs.current[pages[currentPage].id] = el;
-                }
+          {pages.map((page, index) => (
+            <PageCanvas
+              key={page.id}
+              page={page}
+              index={index}
+              canvasSize={canvasSize}
+              onCanvasReady={handleCanvasReady}
+              onPageUpdate={handlePageUpdate}
+              onDuplicate={handleDuplicatePage}
+              onAddBelow={() => {
+                setActivePageIndex(index);
+                handleAddPage();
               }}
-              sx={{
-                position: "relative",
-                border: "3px solid #7c3aed",
-                borderRadius: 2,
-                overflow: "hidden",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                transition: "all 0.3s ease"
+              onToggleLock={handleToggleLockPage}
+              onDelete={handleDeletePage}
+              totalPages={pages.length}
+              isActive={index === activePageIndex}
+              onSetActive={() => {
+                setActivePageIndex(index);
+                setActivePageId(page.id);
+                console.log(`📍 Active page: ${index + 1}`);
               }}
-            >
-              <CanvasContainer>
-                <MiniCanva
-                  action={action}
-                  onCanvasReady={(canvas: fabric.Canvas) => {
-                    console.log('🎨 Canvas initialized');
-                    setCanvasInstance(canvas);
-                    const mgr = new CommandManager(canvas);
-                    setManager(mgr);
-
-                    canvas.on('selection:created', (e) => {
-                      if (e.selected && e.selected[0]) {
-                        (e.selected[0] as any)._previousState = e.selected[0].toJSON();
-                      }
-                    });
-
-                    canvas.on('selection:updated', (e) => {
-                      if (e.selected && e.selected[0]) {
-                        (e.selected[0] as any)._previousState = e.selected[0].toJSON();
-                      }
-                    });
-
-                    // ✅ Load initial page after canvas is ready
-                    setTimeout(() => {
-                      console.log('🎨 Loading initial page');
-                      if (pages[currentPage]?.fabricJSON) {
-                        try {
-                          let jsonData = pages[currentPage].fabricJSON;
-                          if (typeof jsonData === 'string') {
-                            jsonData = JSON.parse(jsonData);
-                          }
-                          canvas.loadFromJSON(jsonData, () => {
-                            if (jsonData.width && jsonData.height) {
-                              canvas.setWidth(jsonData.width);
-                              canvas.setHeight(jsonData.height);
-                              setCanvasSize({ width: jsonData.width, height: jsonData.height });
-                            }
-                            if (jsonData.background) {
-                              canvas.backgroundColor = jsonData.background;
-                            }
-                            canvas.renderAll();
-                            console.log('✅ Initial page loaded');
-                          });
-                        } catch (err) {
-                          console.error('❌ Failed to load initial page:', err);
-                          canvas.backgroundColor = 'white';
-                          canvas.renderAll();
-                        }
-                      } else {
-                        canvas.backgroundColor = 'white';
-                        canvas.renderAll();
-                      }
-                    }, 100);
-                  }}
-                  onObjectSelected={setSelectedObject}
-                  setSelectedObject={setSelectedObject}
-                />
-              </CanvasContainer>
-
-              <Box sx={{
-                position: "absolute",
-                top: 8,
-                left: 8,
-                background: "rgba(0,0,0,0.7)",
-                color: "white",
-                padding: "4px 12px",
-                borderRadius: 1,
-                fontSize: "12px",
-                fontWeight: 600
-              }}>
-                Page {currentPage + 1}
-              </Box>
-            </Box>
-
-            {/* Other Pages Thumbnails */}
-            {pages.map((page, index) => {
-              if (index === currentPage) return null;
-              return (
-                <Box
-                  key={page.id}
-                  ref={(el: HTMLDivElement | null) => {
-                    pageRefs.current[page.id] = el;
-                  }}
-                  onClick={() => handleSwitchToPage(index)}
-                  sx={{
-                    width: canvasSize.width,
-                    height: canvasSize.height,
-                    border: "1px solid #e2e8f0",
-                    borderRadius: 2,
-                    overflow: "hidden",
-                    cursor: "pointer",
-                    position: "relative",
-                    backgroundColor: "#f8fafc",
-                    backgroundImage: page.thumbnail ? `url(${page.thumbnail})` : "none",
-                    backgroundSize: "cover",
-                    backgroundPosition: "center",
-                    transition: "all 0.2s ease",
-                    "&:hover": {
-                      transform: "scale(1.02)",
-                      boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
-                      border: "2px solid #7c3aed"
-                    }
-                  }}
-                >
-                  <Box sx={{
-                    position: "absolute",
-                    top: 8,
-                    left: 8,
-                    background: "rgba(0,0,0,0.7)",
-                    color: "white",
-                    padding: "4px 12px",
-                    borderRadius: 1,
-                    fontSize: "12px",
-                    fontWeight: 600
-                  }}>
-                    Page {index + 1}
-                  </Box>
-
-                  {page.locked && (
-                    <Box sx={{
-                      position: "absolute",
-                      top: 8,
-                      right: 8,
-                      background: "rgba(0,0,0,0.7)",
-                      color: "white",
-                      padding: "4px 8px",
-                      borderRadius: 1
-                    }}>
-                      <LockIcon fontSize="small" />
-                    </Box>
-                  )}
-
-                  <Box sx={{
-                    position: "absolute",
-                    inset: 0,
-                    background: "rgba(0,0,0,0)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    opacity: 0,
-                    transition: "all 0.2s ease",
-                    "&:hover": {
-                      background: "rgba(0,0,0,0.4)",
-                      opacity: 1
-                    }
-                  }}>
-                    <Typography sx={{ color: "white", fontWeight: 600 }}>
-                      Click to Edit
-                    </Typography>
-                  </Box>
-                </Box>
-              );
-            })}
-          </Box>
-
-          {activePanel === "elements" && (
-            <Box sx={{ position: "absolute", top: 0, left: 0, zIndex: 50 }}>
-              <DynamicElementsPanel
-                onAddElement={(actionData: any) => {
-                  console.log("Element action received:", actionData);
-                  setAction(actionData);
-                  setTimeout(() => setActivePanel(null), 100);
-                }}
-                onClose={() => setActivePanel(null)}
-              />
-            </Box>
-          )}
-
-          {activePanel === "animation" && selectedObject && (
-            <AnimationPanel
-              canvas={canvasInstance}
-              selectedObject={selectedObject}
-              onClose={() => setActivePanel(null)}
             />
-          )}
+          ))}
 
-          {/* Bottom Add Page Button */}
-          <Box sx={{
-            my: 3,
-            display: "flex",
-            justifyContent: "center",
-            width: "100%"
-          }}>
-            <Button
-              variant="outlined"
-              size="large"
-              startIcon={<AddIcon />}
-              onClick={() => handleAddPage()}
-              sx={{
-                borderColor: "#7c3aed",
-                color: "#7c3aed",
-                borderWidth: 2,
-                borderStyle: "dashed",
-                py: 2,
-                px: 4,
-                fontSize: "16px",
-                fontWeight: 600,
-                "&:hover": {
-                  borderColor: "#6d28d9",
-                  backgroundColor: "rgba(124, 58, 237, 0.05)",
-                  borderWidth: 2
-                }
-              }}
-            >
-              Add Page
-            </Button>
-          </Box>
+          {/* Add Page Button */}
+          <Button
+            variant="outlined"
+            size="large"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              setActivePageIndex(pages.length - 1);
+              handleAddPage();
+            }}
+            sx={{
+              borderColor: "#7c3aed",
+              color: "#7c3aed",
+              borderWidth: 2,
+              borderStyle: "dashed",
+              py: 2,
+              px: 4,
+              mt: 2,
+              fontSize: "16px",
+              fontWeight: 600,
+              "&:hover": {
+                borderColor: "#6d28d9",
+                backgroundColor: "rgba(124, 58, 237, 0.05)",
+                borderWidth: 2
+              }
+            }}
+          >
+            Add Page Below
+          </Button>
         </Box>
+
+
+
         {/* Context Menu for right-click on canvas objects */}
         <Menu
           open={contextMenu !== null}
@@ -2746,6 +2422,7 @@ const CanvasEditor: React.FC = () => {
               <GroupOffIcon sx={{ mr: 1 }} /> Ungroup <span style={{ marginLeft: "auto", color: "#888" }}>Ctrl+Shift+G</span>
             </MenuItem>
           ) : null}
+
 
           <Divider />
 
@@ -2861,212 +2538,42 @@ const CanvasEditor: React.FC = () => {
           }
           allowGradients={colorPickerType === 'fill'}
         />
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        {/* ✅ My Projects Panel */}
+        {/* My Projects Panel */}
         {activeCategory === "myprojects" && (
           <Box sx={{ width: 320, minWidth: 320, borderLeft: "1px solid #ddd" }}>
             <MyProjectsPanel
-              onSelectProject={async (projectData: any) => {
-                if (!canvasInstance || isLoadingProject) {
-                  console.warn('⚠️ Canvas not ready or already loading');
-                  return;
-                }
+              onSelectProject={(projectData: any) => {
+                console.log(' Project selected:', projectData.name);
 
-                // ✅ Set loading flag to prevent multiple clicks
-                setIsLoadingProject(true);
-
-                console.log('🔄 Starting project load:', projectData.name);
-
-                try {
-                  // ✅ STEP 1: Save current state
-                  await saveCurrentCanvasToPage(currentPage);
-
-                  // ✅ STEP 2: Reset all states
-                  setSelectedObject(null);
-                  setPropertyTab("rectangle");
-                  setAction(null);
-
-                  // ✅ STEP 3: Clear canvas completely
-                  canvasInstance.clear();
-                  canvasInstance.backgroundColor = 'white';
-                  canvasInstance.renderAll();
-
-                  // ✅ STEP 4: Wait for clear to complete
-                  await new Promise(resolve => setTimeout(resolve, 150));
-
-                  // ✅ STEP 5: Set canvas size FIRST
-                  const newWidth = projectData.size?.width || 800;
-                  const newHeight = projectData.size?.height || 600;
-
-                  console.log('📐 Setting canvas size:', { width: newWidth, height: newHeight });
-
-                  canvasInstance.setWidth(newWidth);
-                  canvasInstance.setHeight(newHeight);
-                  setCanvasSize({ width: newWidth, height: newHeight });
-
-                  // ✅ STEP 6: Parse and validate pages
-                  if (!projectData.pages || !Array.isArray(projectData.pages) || projectData.pages.length === 0) {
-                    console.error('❌ Invalid pages data');
-                    setIsLoadingProject(false);
-                    return;
-                  }
-
-                  const loadedPages: PageItem[] = projectData.pages.map((pg: any, i: number) => {
-                    let fabricJSON = pg.fabricJSON;
-
-                    // Parse if string
-                    if (typeof fabricJSON === 'string') {
-                      try {
-                        fabricJSON = JSON.parse(fabricJSON);
-                      } catch (e) {
-                        console.error(`❌ Parse error page ${i}:`, e);
-                        fabricJSON = {
-                          version: "5.3.0",
-                          objects: [],
-                          background: "white",
-                          width: newWidth,
-                          height: newHeight
-                        };
-                      }
-                    }
-
-                    // Deep clone to prevent reference issues
-                    fabricJSON = JSON.parse(JSON.stringify(fabricJSON));
-
-                    // Ensure canvas size in fabricJSON
-                    if (fabricJSON) {
-                      fabricJSON.width = newWidth;
-                      fabricJSON.height = newHeight;
-                    }
-
-                    return {
-                      id: pg.id || uuidv4(),
-                      name: pg.name || `Page ${i + 1}`,
-                      fabricJSON: fabricJSON,
-                      thumbnail: pg.thumbnail || null,
-                      locked: !!pg.locked,
-                    };
-                  });
-
-                  console.log('📦 Loaded pages:', loadedPages.map((p, i) =>
-                    `Page ${i + 1}: ${p.fabricJSON?.objects?.length || 0} objects`
-                  ));
-
-                  // ✅ CRITICAL FIX: Load first page BEFORE setting state
-                  const firstPage = loadedPages[0];
-                  if (firstPage && firstPage.fabricJSON) {
-                    let jsonData = firstPage.fabricJSON;
-
-                    if (typeof jsonData === 'string') {
-                      jsonData = JSON.parse(jsonData);
-                    }
-
-                    // ✅ Load synchronously using Promise
-                    await new Promise<void>((resolve) => {
-                      canvasInstance.loadFromJSON(jsonData, () => {
-                        canvasInstance.setWidth(newWidth);
-                        canvasInstance.setHeight(newHeight);
-
-                        if (jsonData.background) {
-                          canvasInstance.backgroundColor = jsonData.background;
-                        }
-
-                        canvasInstance.renderAll();
-                        console.log(`✅ First page loaded: ${canvasInstance.getObjects().length} objects`);
-                        resolve();
-                      });
-                    });
-                  }
-
-                  // ✅ NOW set pages state AFTER canvas is loaded
-                  setPages(loadedPages);
-                  setCurrentPage(0);
-
-                  // ✅ Set metadata
-                  setCurrentTemplateId(projectData.id);
-                  setTemplateName(projectData.name || "");
-                  setIsEditingTemplate(true);
-                  setBaseAdminTemplateId(null);
-
-                  // ✅ Close panel after everything is done
-                  await new Promise(resolve => setTimeout(resolve, 100));
-                  setActiveCategory(null);
-
-                  console.log('✅ Project load complete');
-
-                } catch (error) {
-                  console.error('❌ Error loading project:', error);
-                } finally {
-                  // ✅ Release loading flag
-                  setTimeout(() => {
-                    setIsLoadingProject(false);
-                  }, 300);
-                }
+                //  Simple - handlers.onAddShape use karo
+                handlers.onAddShape({
+                  type: "LOAD_TEMPLATE",
+                  template: projectData
+                });
               }}
               onClose={() => setActiveCategory(null)}
             />
           </Box>
         )}
-        {/* Template panel will need thumbnails — TemplatePanel component should read pages[*].thumbnail from the template when loaded.
-            We'll keep the TemplatePanel as you had but you promised to send your TemplatePanel so I can wire thumbnails in the sidebar. */}
         {activeCategory === "templates" && (
           <Box sx={{ width: 320, minWidth: 320, borderLeft: "1px solid #ddd" }}>
-            <TemplatePanel onTemplateSelect={(templateData: any) => {
-              if (!canvasInstance) return;
-              const snapshot = canvasInstance.toJSON();
-              const prevSize = { width: canvasInstance.width, height: canvasInstance.height };
-              const prevBg = canvasInstance.backgroundColor;
-              setAction({
-                type: "LOAD_TEMPLATE",
-                payload: { template: templateData, snapshot, prevSize, prevBg }
-              });
-              // set metadata for saving
-              if (templateData) {
-                setCurrentTemplateId(templateData.id);
-                setTemplateName(templateData.name || "");
-                setIsEditingTemplate(true);
+            <TemplatePanel
+              onTemplateSelect={(templateData: any) => {
+                console.log('Template selected:', templateData.name);
 
-                // If templateData contains pages, load them (also duplicates code above)
-                if (templateData.pages && Array.isArray(templateData.pages) && templateData.pages.length > 0) {
-                  const loadedPages: PageItem[] = templateData.pages.map((pg: any, i: number) => ({
-                    id: pg.id || uuidv4(),
-                    name: pg.name || `Page ${i + 1}`,
-                    fabricJSON: pg.fabricJSON || pg.json || null,
-                    thumbnail: pg.thumbnail || null,
-                    locked: !!pg.locked,
-                  }));
-                  setPages(loadedPages);
-                  setTimeout(() => loadPageToCanvas(0), 50);
-                } else if (templateData.fabricJSON || templateData.json) {
-                  setPages([{
-                    id: templateData.id || uuidv4(),
-                    name: templateData.name || "Page 1",
-                    fabricJSON: templateData.fabricJSON || templateData.json || null,
-                    thumbnail: templateData.thumbnail || null,
-                    locked: false
-                  }]);
-                  setTimeout(() => loadPageToCanvas(0), 50);
-                }
-              }
-            }} />
+                //  Simple - use handlers.onAddShape
+                handlers.onAddShape({
+                  type: "LOAD_TEMPLATE",
+                  template: templateData
+                });
+              }}
+              onClose={() => setActiveCategory(null)}
+            />
           </Box>
         )}
       </Box>
     </Box>
   );
 };
+
 export default CanvasEditor;

@@ -43,7 +43,7 @@ const uploadSources = [
   { name: "Klaviyo", icon: <img src="/uploadIcons/klaviyo.png" alt="Klaviyo" width={40} /> },
 ];
 
-// ✅ Helper to get token from localStorage
+// Helper to get token from localStorage
 const getAuthToken = () => {
   if (typeof window !== 'undefined') {
     return localStorage.getItem('token') || '';
@@ -71,19 +71,19 @@ const UploadsPanel: React.FC<UploadsPanelProps> = ({ onAddUpload, onClose }) => 
     try {
       setLoading(true);
       const res = await api.get("/uploads/me");
-      console.log("✅ Fetched uploads:", res.data);
+      console.log("Fetched uploads:", res.data);
       
       const token = getAuthToken();
       
       setUploads(res.data.map((item: any) => ({
         id: item.id,
-        url: `${item.url}?token=${token}`, // ✅ Add token to URL
+        url: `${item.url}?token=${token}`, 
         filename: item.filename,
         type: item.type,
         uploadedAt: new Date(item.createdAt).toLocaleDateString(),
       })));
     } catch (error) {
-      console.error("❌ Error fetching uploads:", error);
+      console.error(" Error fetching uploads:", error);
     } finally {
       setLoading(false);
     }
@@ -113,7 +113,7 @@ const UploadsPanel: React.FC<UploadsPanelProps> = ({ onAddUpload, onClose }) => 
       }
       await fetchUserUploads();
     } catch (error) {
-      console.error("❌ Error uploading files:", error);
+      console.error(" Error uploading files:", error);
     } finally {
       setLoading(false);
       setUploadProgress(0);
@@ -123,17 +123,17 @@ const UploadsPanel: React.FC<UploadsPanelProps> = ({ onAddUpload, onClose }) => 
   const handleUploadClick = () => fileInputRef.current?.click();
   
   const handleImageClick = (item: UploadItem) => {
-    console.log("🖼️ Adding image to canvas:", item.url);
+    console.log("Adding image to canvas:", item.url);
     onAddUpload({ type: "ADD_IMAGE", src: item.url });
   };
 
   const handleImageError = (itemId: string) => {
-    console.error("❌ Failed to load image:", itemId);
+    console.error("Failed to load image:", itemId);
     setImageErrors(prev => ({ ...prev, [itemId]: true }));
   };
 
   const handleImageLoad = (itemId: string) => {
-    console.log("✅ Image loaded successfully:", itemId);
+    console.log(" Image loaded successfully:", itemId);
   };
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, idx: number) => {
@@ -159,7 +159,7 @@ const UploadsPanel: React.FC<UploadsPanelProps> = ({ onAddUpload, onClose }) => 
       await api.delete(`/uploads/${item.id}`);
       await fetchUserUploads();
     } catch (error) {
-      console.error("❌ Error deleting file:", error);
+      console.error(" Error deleting file:", error);
     }
     handleMenuClose();
   };

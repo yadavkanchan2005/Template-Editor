@@ -51,67 +51,123 @@ const PageCanvas: React.FC<PageCanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [canvas, setCanvas] = useState<fabric.Canvas | null>(null);
+  const canvasInstanceRef = useRef<fabric.Canvas | null>(null); 
+  const isInitialized = useRef(false);
 
+  // FIX 1: Initialize canvas once per page
   useEffect(() => {
-    if (!canvasRef.current || canvas) return;
+    if (!canvasRef.current || isInitialized.current) return;
 
-    const fabricCanvas = new fabric.Canvas(canvasRef.current, {
-      width: canvasSize.width,
-      height: canvasSize.height,
-      backgroundColor: 'white',
-      preserveObjectStacking: true,
-    });
+    console.log(`Initializing canvas for page ${index + 1}`);
 
-    // Load page content if exists
-    if (page.fabricJSON) {
-      let jsonData = page.fabricJSON;
-      if (typeof jsonData === 'string') {
-        try {
-          jsonData = JSON.parse(jsonData);
-        } catch (e) {
-          console.error('Failed to parse fabricJSON:', e);
-        }
-      }
-
-      fabricCanvas.loadFromJSON(jsonData, () => {
-        if (jsonData.background) {
-          fabricCanvas.backgroundColor = jsonData.background;
-        }
-        fabricCanvas.renderAll();
+    try {
+      const fabricCanvas = new fabric.Canvas(canvasRef.current, {
+        width: canvasSize.width,
+        height: canvasSize.height,
+        backgroundColor: 'white',
+        preserveObjectStacking: true,
+        renderOnAddRemove: true,
+        enableRetinaScaling: true,
       });
+
+      // Store reference
+      canvasInstanceRef.current = fabricCanvas;
+      isInitialized.current = true;
+      
+      setCanvas(fabricCanvas);
+      onCanvasReady(page.id, fabricCanvas);
+
+      console.log(` Canvas ready for page ${index + 1}`);
+
+    } catch (error) {
+      console.error(` Canvas init error for page ${index + 1}:`, error);
     }
 
-    // Apply lock state
-    if (page.locked) {
-      fabricCanvas.selection = false;
-      fabricCanvas.getObjects().forEach((obj) => {
-        obj.selectable = false;
-        obj.evented = false;
-      });
-    }
-
-    // Auto-save on changes
-    fabricCanvas.on('object:modified', () => {
-      onPageUpdate(page.id);
-    });
-
-    fabricCanvas.on('object:added', () => {
-      onPageUpdate(page.id);
-    });
-
-    fabricCanvas.on('object:removed', () => {
-      onPageUpdate(page.id);
-    });
-
-    setCanvas(fabricCanvas);
-    onCanvasReady(page.id, fabricCanvas);
-
+    //  FIX: Safe cleanup
     return () => {
-      fabricCanvas.dispose();
+      console.log(`Cleaning up canvas for page ${index + 1}`);
+      
+      try {
+        const fabricCanvas = canvasInstanceRef.current;
+        
+        if (fabricCanvas) {
+          //  Check if canvas elements exist before cleanup
+          if (fabricCanvas.upperCanvasEl) {
+            fabricCanvas.off(); // Remove all event listeners
+          }
+          
+          fabricCanvas.clear(); // Clear objects
+          
+          if (fabricCanvas.dispose) {
+            fabricCanvas.dispose(); // Dispose canvas
+          }
+          
+          canvasInstanceRef.current = null;
+          isInitialized.current = false;
+          console.log(`✅ Canvas disposed for page ${index + 1}`);
+        }
+      } catch (error) {
+        console.warn(`Cleanup warning for page ${index + 1}:`, error);
+        isInitialized.current = false;
+      }
     };
-  }, []);
+  }, [page.id]); // Only re-run if page.id changes
 
-  // Update lock state
+  // FIX 2: Load content only when canvas is ready
+  useEffect(() => {
+    if (!canvas || !page.fabricJSON) return;
+
+    console.log(` Loading content for page ${index + 1}`);
+
+    let jsonData = page.fabricJSON;
+
+    // Parse if string
+    if (typeof jsonData === 'string') {
+      try {
+        jsonData = JSON.parse(jsonData);
+      } catch (e) {
+        console.error('Failed to parse fabricJSON:', e);
+        return;
+      }
+    }
+
+    // Validate
+    if (!jsonData || typeof jsonData !== 'object') {
+      console.warn('Invalid fabricJSON for page', index + 1);
+      return;
+    }
+
+    try {
+      canvas.loadFromJSON(jsonData, () => {
+        // Set background
+        if (jsonData.background) {
+          canvas.backgroundColor = jsonData.background;
+        }
+
+        // Set dimensions
+        if (jsonData.width && jsonData.height) {
+          canvas.setWidth(jsonData.width);
+          canvas.setHeight(jsonData.height);
+        }
+
+        // Apply lock state
+        if (page.locked) {
+          canvas.selection = false;
+          canvas.getObjects().forEach((obj) => {
+            obj.selectable = false;
+            obj.evented = false;
+          });
+        }
+
+        canvas.renderAll();
+        console.log(`Loaded ${canvas.getObjects().length} objects for page ${index + 1}`);
+      });
+    } catch (error) {
+      console.error(`Failed to load content for page ${index + 1}:`, error);
+    }
+  }, [canvas]); // Only depend on canvas
+
+  //  FIX 3: Handle lock state changes
   useEffect(() => {
     if (!canvas) return;
     
@@ -123,18 +179,31 @@ const PageCanvas: React.FC<PageCanvasProps> = ({
     canvas.renderAll();
   }, [page.locked, canvas]);
 
+  //  FIX 4: Handle canvas size changes
+  useEffect(() => {
+    if (!canvas) return;
+    
+    if (canvas.width !== canvasSize.width || canvas.height !== canvasSize.height) {
+      canvas.setWidth(canvasSize.width);
+      canvas.setHeight(canvasSize.height);
+      canvas.renderAll();
+      console.log(`Resized page ${index + 1}: ${canvasSize.width}x${canvasSize.height}`);
+    }
+  }, [canvas, canvasSize.width, canvasSize.height]);
+
   return (
     <Box
       onClick={onSetActive}
       sx={{
         width: "fit-content",
         position: "relative",
-        mb: 4
+        mb: 0
       }}
     >
-      {/* Page Controls */}
+      {/* Page Header */}
       <Box sx={{
         display: "flex",
+            mt: 6 ,
         gap: 1,
         alignItems: "center",
         justifyContent: "space-between",
@@ -182,21 +251,23 @@ const PageCanvas: React.FC<PageCanvasProps> = ({
             {page.locked ? <LockIcon fontSize="small" /> : <LockOpenIcon fontSize="small" />}
           </IconButton>
           
-          <IconButton 
-            size="small" 
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(index);
-            }} 
-            title="Delete page"
-            sx={{ color: "#ef4444" }}
-          >
-            <DeleteIcon fontSize="small" />
-          </IconButton>
+          {totalPages > 1 && (
+            <IconButton 
+              size="small" 
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(index);
+              }} 
+              title="Delete page"
+              sx={{ color: "#ef4444" }}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          )}
         </Box>
       </Box>
 
-      {/* Canvas */}
+      {/* Canvas Container */}
       <Box
         sx={{
           position: "relative",
@@ -207,7 +278,7 @@ const PageCanvas: React.FC<PageCanvasProps> = ({
             ? "0 8px 24px rgba(124,58,237,0.3)" 
             : "0 4px 12px rgba(0,0,0,0.08)",
           transition: "all 0.3s ease",
-          cursor: "default",
+          cursor: "pointer",
           "&:hover": {
             border: isActive ? "3px solid #7c3aed" : "2px solid #a78bfa",
             boxShadow: "0 8px 20px rgba(124,58,237,0.2)"
@@ -216,6 +287,7 @@ const PageCanvas: React.FC<PageCanvasProps> = ({
       >
         <canvas ref={canvasRef} />
         
+        {/* Lock indicator */}
         {page.locked && (
           <Box sx={{
             position: "absolute",
