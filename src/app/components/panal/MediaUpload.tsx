@@ -28,7 +28,7 @@ import {
 } from "@mui/icons-material";
 import { mediaApi, Media } from "../../../../services/mediaApi";
 
-// ✅ Helper to get token from localStorage
+// Helper to get token from localStorage
 const getAuthToken = () => {
   if (typeof window !== "undefined") {
     return localStorage.getItem("token") || "";

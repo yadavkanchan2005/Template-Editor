@@ -332,7 +332,7 @@ import TextPanel from "./panal/TextPanel";
 const CanvaSidebar = styled(Drawer)(({ theme }) => ({
   "& .MuiDrawer-paper": {
     width: 80,
-    backgroundColor: "#f8fafc",
+   backgroundColor: "#fff",  
     borderRight: "1px solid #e2e8f0",
     marginTop: "64px",
     paddingTop: theme.spacing(2),
@@ -471,6 +471,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             alignItems: "center",
             height: "100%",
             overflowY: "auto",
+            bgcolor: "#fff",  
           }}
         >
           {/* Templates */}

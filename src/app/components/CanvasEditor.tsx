@@ -64,12 +64,13 @@ import { templateApi } from "../../../services/templateApi";
 import ColorPicker from "./data/ColorPicker";
 import MyProjectsPanel from "./panal/MyProjectsPanel";
 import PageCanvas from "./PageCanvas";
+import type { AlertColor } from '@mui/material';
 
 import * as fabric from "fabric";
 import { v4 as uuidv4 } from "uuid";
 
 const CanvaHeader = styled(AppBar)(({ theme }) => ({
-  background: "linear-gradient(135deg, #00c4cc 0%, #7b68ee 100%)",
+  background: "linear-gradient(135deg, #6b7bf6 0%, #9b59b6 100%)",
   boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
   zIndex: theme.zIndex.drawer + 1,
 }));
@@ -121,6 +122,14 @@ type PageItem = {
   locked?: boolean;
 };
 
+type SnackbarState = {
+  open: boolean;
+  message: string;
+  severity: AlertColor; // 'success' | 'info' | 'warning' | 'error'
+};
+
+
+
 const CanvasEditor: React.FC = () => {
   const { user, isAuthenticated, isAdmin, logout } = useAuth();
   const [mounted, setMounted] = useState(false);
@@ -151,10 +160,10 @@ const CanvasEditor: React.FC = () => {
   const [templateName, setTemplateName] = useState("");
   const [templateCategory, setTemplateCategory] = useState("");
   const [saving, setSaving] = useState(false);
-  const [snackbar, setSnackbar] = useState({
+  const [snackbar, setSnackbar] = useState<SnackbarState>({
     open: false,
-    message: "",
-    severity: "success" as "success" | "error",
+    message: '',
+    severity: 'success',
   });
   const [currentTemplateId, setCurrentTemplateId] = useState<string | null>(null);
   const [isEditingTemplate, setIsEditingTemplate] = useState(false);
@@ -174,93 +183,144 @@ const CanvasEditor: React.FC = () => {
   const manager = managers.get(pages[activePageIndex]?.id) || null;
 
 
+  const [currentPageForBg, setCurrentPageForBg] = useState<string | null>(null);
+  const [currentBgColor, setCurrentBgColor] = useState<string | any>('white');
+
 
   useEffect(() => setMounted(true), []);
 
 
-  //  Fabric 5+ safe cross-platform paste
-useEffect(() => {
-  const handlePaste = async (e: ClipboardEvent) => {
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+  // Stable z-index change without object:added
+  function moveObjectToIndex(canvas: fabric.Canvas, obj: fabric.Object, newIndex: number) {
+    const objects = canvas.getObjects();
+    const len = objects.length;
+    if (len === 0) return;
 
-    e.preventDefault();
+    const currIndex = objects.indexOf(obj);
+    if (currIndex === -1) return;
 
-    const activeCanvas = activePageId ? canvases.get(activePageId) : null;
-    if (!activeCanvas) return;
+    const clamped = Math.max(0, Math.min(newIndex, len - 1));
+    if (currIndex === clamped) return;
 
-    try {
-      const text = e.clipboardData?.getData('text');
-      if (text) {
-        try {
-          const json = JSON.parse(text);
-          if (json.type && json.objects) {
-            const objects: fabric.FabricObject[] = await fabric.util.enlivenObjects(json.objects);
-            objects.forEach((obj) => {
-              obj.set({
-                left: (obj.left || 0) + 20,
-                top: (obj.top || 0) + 20,
-              });
-              activeCanvas.add(obj);
-            });
-            activeCanvas.requestRenderAll();
-            return;
-          }
-        } catch { }
+    // Reorder in-place without remove/add
+    objects.splice(currIndex, 1);
+    objects.splice(clamped, 0, obj);
+    (canvas as any)._objects = objects;
 
-        const textbox = new fabric.Textbox(text, {
-          left: 100,
-          top: 100,
-          fontSize: 24,
-          fill: '#000000',
-          width: 400,
-        });
-        activeCanvas.add(textbox);
-        activeCanvas.setActiveObject(textbox);
-        activeCanvas.requestRenderAll();
-        return;
+    obj.dirty = true as any;
+
+    // Silent remove without firing Fabric events
+    function silentRemove(canvas: fabric.Canvas, obj: fabric.Object) {
+      const arr = canvas.getObjects();
+      const idx = arr.indexOf(obj);
+      if (idx !== -1) {
+        arr.splice(idx, 1);
+        (canvas as any)._objects = arr;
       }
+      // detach any group ref
+      (obj as any).group = null;
+    }
 
-      const items = e.clipboardData?.items;
-      if (items) {
-        for (let i = 0; i < items.length; i++) {
-          if (items[i].type.indexOf('image') !== -1) {
-            const blob = items[i].getAsFile();
-            if (blob) {
-              const reader = new FileReader();
-              reader.onload = (event) => {
-                fabric.Image.fromURL(event.target?.result as string, {
-                  crossOrigin: 'anonymous',
-                }).then((img) => {
-                  img.scaleToWidth(400);
-                  img.set({ left: 100, top: 100 });
-                  activeCanvas.add(img);
-                  activeCanvas.setActiveObject(img);
-                  activeCanvas.requestRenderAll();
+    // Silent insert without firing Fabric events
+    function silentInsertAt(canvas: fabric.Canvas, index: number, obj: fabric.Object) {
+      const arr = canvas.getObjects();
+      const clamped = Math.max(0, Math.min(index, arr.length));
+      // attach canvas
+      (obj as any).canvas = canvas;
+      (obj as any).group = null;
+      arr.splice(clamped, 0, obj);
+      (canvas as any)._objects = arr;
+      obj.setCoords();
+    }
+
+    canvas.requestRenderAll();
+  }
+
+
+
+  //  Fabric 5+ safe cross-platform paste
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+      e.preventDefault();
+
+      const activeCanvas = activePageId ? canvases.get(activePageId) : null;
+      if (!activeCanvas) return;
+
+      try {
+        const text = e.clipboardData?.getData('text');
+        if (text) {
+          try {
+            const json = JSON.parse(text);
+            if (json.type && json.objects) {
+              const objects: fabric.FabricObject[] = await fabric.util.enlivenObjects(json.objects);
+              objects.forEach((obj) => {
+                obj.set({
+                  left: (obj.left || 0) + 20,
+                  top: (obj.top || 0) + 20,
                 });
-              };
-              reader.readAsDataURL(blob);
+                activeCanvas.add(obj);
+              });
+              activeCanvas.requestRenderAll();
               return;
+            }
+          } catch { }
+
+          const textbox = new fabric.Textbox(text, {
+            left: 100,
+            top: 100,
+            fontSize: 24,
+            fill: '#000000',
+            width: 400,
+          });
+          activeCanvas.add(textbox);
+          activeCanvas.setActiveObject(textbox);
+          activeCanvas.requestRenderAll();
+          return;
+        }
+
+        const items = e.clipboardData?.items;
+        if (items) {
+          for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+              const blob = items[i].getAsFile();
+              if (blob) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                  fabric.Image.fromURL(event.target?.result as string, {
+                    crossOrigin: 'anonymous',
+                  }).then((img) => {
+                    img.scaleToWidth(400);
+                    img.set({ left: 100, top: 100 });
+                    activeCanvas.add(img);
+                    activeCanvas.setActiveObject(img);
+                    activeCanvas.requestRenderAll();
+                  });
+                };
+                reader.readAsDataURL(blob);
+                return;
+              }
             }
           }
         }
+      } catch (error) {
+        console.error('Paste error:', error);
       }
-    } catch (error) {
-      console.error('Paste error:', error);
-    }
-  };
+    };
 
-  window.addEventListener('paste', handlePaste);
-  
-  //  Safe cleanup
-  return () => {
-    try {
-      window.removeEventListener('paste', handlePaste);
-    } catch (error) {
-      console.warn('Paste listener cleanup warning:', error);
-    }
-  };
-}, [canvases, activePageId]);
+    window.addEventListener('paste', handlePaste);
+
+    //  Safe cleanup
+    return () => {
+      try {
+        window.removeEventListener('paste', handlePaste);
+      } catch (error) {
+        console.warn('Paste listener cleanup warning:', error);
+      }
+    };
+  }, [canvases, activePageId]);
 
 
   //  Auto-save before page refresh/close
@@ -288,49 +348,230 @@ useEffect(() => {
   }, []); //  Empty deps to avoid re-attaching
 
 
-//  FIXED: Safe context menu setup
-useEffect(() => {
-  if (!canvasInstance) return;
+  //  FIXED: Safe context menu setup
+  // useEffect(() => {
+  //   if (!canvasInstance) return;
 
-  const handleContextMenu = (e: MouseEvent) => {
-    const target = canvasInstance.findTarget(e);
+  //   const handleContextMenu = (e: MouseEvent) => {
+  //     const target = canvasInstance.findTarget(e);
 
-    if (target) {
-      e.preventDefault();
-      setSelectedObject(target);
-      setContextMenu({
-        mouseX: e.clientX - 2,
-        mouseY: e.clientY - 4,
-        object: target,
+  //     if (target) {
+  //       e.preventDefault();
+  //       setSelectedObject(target);
+  //       setContextMenu({
+  //         mouseX: e.clientX - 2,
+  //         mouseY: e.clientY - 4,
+  //         object: target,
+  //       });
+  //     } else {
+  //       setContextMenu(null);
+  //     }
+  //   };
+
+  //   //  Check if upperCanvasEl exists before adding listener
+  //   const upperCanvas = canvasInstance.upperCanvasEl;
+  //   if (upperCanvas) {
+  //     upperCanvas.addEventListener("contextmenu", handleContextMenu);
+  //   }
+
+  //   return () => {
+  //     // Safe cleanup - check if still exists
+  //     if (upperCanvas && upperCanvas.removeEventListener) {
+  //       try {
+  //         upperCanvas.removeEventListener("contextmenu", handleContextMenu);
+  //       } catch (error) {
+  //         console.warn('Context menu cleanup warning:', error);
+  //       }
+  //     }
+  //   };
+  // }, [canvasInstance]);
+
+
+  //  FIXED: Safe context menu setup + Custom selection colors
+  //  FIXED: Exact Canva-style - Hover shows border only, Select shows controls
+  useEffect(() => {
+    if (!canvasInstance) return;
+
+    // 🎨 Selection rectangle styling
+    canvasInstance.selectionColor = 'rgba(139, 92, 246, 0.08)';
+    canvasInstance.selectionBorderColor = '#8b5cf6';
+    canvasInstance.selectionLineWidth = 2;
+
+    // 🎨 Default object styling
+    const styleObject = (obj: fabric.Object) => {
+      obj.set({
+        borderColor: '#8b5cf6',
+        borderScaleFactor: 2,
+        cornerColor: '#ffffff',
+        cornerStrokeColor: '#8b5cf6',
+        cornerStyle: 'circle',
+        cornerSize: 10,
+        transparentCorners: false,
+        padding: 5,
+        hasRotatingPoint: true,
+        rotatingPointOffset: 40,
       });
-    } else {
-      setContextMenu(null);
-    }
-  };
+    };
 
-  //  Check if upperCanvasEl exists before adding listener
-  const upperCanvas = canvasInstance.upperCanvasEl;
-  if (upperCanvas) {
-    upperCanvas.addEventListener("contextmenu", handleContextMenu);
-  }
+    // Apply to all existing objects
+    canvasInstance.getObjects().forEach((obj) => {
+      styleObject(obj);
+      // Initially hide borders and controls
+      obj.set({
+        hasBorders: false,
+        hasControls: false,
+      });
+    });
 
-  return () => {
-    // Safe cleanup - check if still exists
-    if (upperCanvas && upperCanvas.removeEventListener) {
-      try {
-        upperCanvas.removeEventListener("contextmenu", handleContextMenu);
-      } catch (error) {
-        console.warn('Context menu cleanup warning:', error);
+    // Apply to newly added objects
+    const handleObjectAdded = (e: any) => {
+      if (e.target) {
+        styleObject(e.target);
+        // Hide by default
+        e.target.set({
+          hasBorders: false,
+          hasControls: false,
+        });
       }
+    };
+
+    canvasInstance.on('object:added', handleObjectAdded);
+
+    // 🎨 HOVER - Show purple border only (NO controls)
+    const handleMouseOver = (e: any) => {
+      const target = e.target;
+      const activeObj = canvasInstance.getActiveObject();
+
+      if (target && target !== activeObj) {
+        target.set({
+          hasBorders: true,      // Show border
+          hasControls: false,    // Hide controls (no white dots)
+        });
+
+        canvasInstance.setCursor('move');
+        canvasInstance.requestRenderAll();
+      }
+    };
+
+    const handleMouseOut = (e: any) => {
+      const target = e.target;
+      const activeObj = canvasInstance.getActiveObject();
+
+      if (target && target !== activeObj) {
+        target.set({
+          hasBorders: false,     // Hide border
+          hasControls: false,    // Keep controls hidden
+        });
+
+        canvasInstance.setCursor('default');
+        canvasInstance.requestRenderAll();
+      }
+    };
+
+    // 🎨 SELECTION CREATED - Show border + controls (with white dots)
+    const handleSelectionCreated = (e: any) => {
+      if (e.selected && e.selected[0]) {
+        e.selected.forEach((obj: fabric.Object) => {
+          obj.set({
+            hasBorders: true,      // Show border
+            hasControls: true,     // Show controls (white dots)
+          });
+        });
+        canvasInstance.requestRenderAll();
+      }
+    };
+
+    // 🎨 SELECTION UPDATED - Keep showing border + controls
+    const handleSelectionUpdated = (e: any) => {
+      // Show on newly selected
+      if (e.selected && e.selected[0]) {
+        e.selected.forEach((obj: fabric.Object) => {
+          obj.set({
+            hasBorders: true,
+            hasControls: true,
+          });
+        });
+      }
+
+      // Hide on deselected
+      if (e.deselected) {
+        e.deselected.forEach((obj: fabric.Object) => {
+          obj.set({
+            hasBorders: false,
+            hasControls: false,
+          });
+        });
+      }
+
+      canvasInstance.requestRenderAll();
+    };
+
+    // 🎨 SELECTION CLEARED - Hide everything
+    const handleSelectionCleared = () => {
+      canvasInstance.getObjects().forEach((obj) => {
+        obj.set({
+          hasBorders: false,
+          hasControls: false,
+        });
+      });
+      canvasInstance.requestRenderAll();
+    };
+
+    canvasInstance.on('mouse:over', handleMouseOver);
+    canvasInstance.on('mouse:out', handleMouseOut);
+    canvasInstance.on('selection:created', handleSelectionCreated);
+    canvasInstance.on('selection:updated', handleSelectionUpdated);
+    canvasInstance.on('selection:cleared', handleSelectionCleared);
+
+    // Context menu
+    const handleContextMenu = (e: MouseEvent) => {
+      const target = canvasInstance.findTarget(e);
+      if (target) {
+        e.preventDefault();
+        setSelectedObject(target);
+        setContextMenu({
+          mouseX: e.clientX - 2,
+          mouseY: e.clientY - 4,
+          object: target,
+        });
+      } else {
+        setContextMenu(null);
+      }
+    };
+
+    const upperCanvas = canvasInstance.upperCanvasEl;
+    if (upperCanvas) {
+      upperCanvas.addEventListener("contextmenu", handleContextMenu);
     }
-  };
-}, [canvasInstance]);
+
+    // Cleanup
+    return () => {
+      canvasInstance.off('object:added', handleObjectAdded);
+      canvasInstance.off('mouse:over', handleMouseOver);
+      canvasInstance.off('mouse:out', handleMouseOut);
+      canvasInstance.off('selection:created', handleSelectionCreated);
+      canvasInstance.off('selection:updated', handleSelectionUpdated);
+      canvasInstance.off('selection:cleared', handleSelectionCleared);
+
+      if (upperCanvas && upperCanvas.removeEventListener) {
+        try {
+          upperCanvas.removeEventListener("contextmenu", handleContextMenu);
+        } catch (error) {
+          console.warn('Context menu cleanup warning:', error);
+        }
+      }
+    };
+  }, [canvasInstance]);
 
   const handleCloseContextMenu = () => setContextMenu(null);
 
   // Context menu actions
   const handleMenuAction = (action: string) => {
-    if (!selectedObject || !canvasInstance) return;
+    console.log('🎯 Action triggered:', action);
+    if (!canvasInstance || !manager || !selectedObject) return;
+
+    const active = canvasInstance.getActiveObject() as fabric.Object | null;
+    // Cases that need a selection will check `active` below
 
     switch (action) {
       case "copy":
@@ -359,110 +600,341 @@ useEffect(() => {
         canvasInstance.remove(selectedObject);
         setSelectedObject(null);
         break;
+      case "group": {
+        const actives = canvasInstance?.getActiveObjects() || [];
+        if (actives.length > 1 && canvasInstance && manager) {
+          const canvas = canvasInstance;
 
-      case "ungroup":
-        if (selectedObject?.type === "group" && canvasInstance) {
-          const group = selectedObject as fabric.Group;
-          const items = group.getObjects();
+          // Store original state
+          const indices = actives.map((o) => canvas.getObjects().indexOf(o));
+          const insertIndex = Math.min(...indices);
+          const storedObjects = actives.slice(); // Store reference
 
-          //  FIXED: Calculate absolute positions
-          const groupMatrix = group.calcTransformMatrix();
+          manager.execute({
+            do: () => {
+              // Simply remove and group - Fabric handles it
+              const toGroup = storedObjects.slice();
+              toGroup.forEach(obj => canvas.remove(obj));
 
-          canvasInstance.remove(group);
+              const group = new fabric.Group(toGroup);
+              canvas.add(group);
+              canvas.setActiveObject(group);
+              canvas.requestRenderAll();
 
-          items.forEach(item => {
-            // Apply group's transform to get absolute position
-            const absolutePoint = fabric.util.transformPoint(
-              { x: item.left || 0, y: item.top || 0 },
-              groupMatrix
-            );
+              setSnackbar({
+                open: true,
+                message: `Grouped ${toGroup.length} objects`,
+                severity: 'success'
+              });
+            },
 
-            item.set({
-              left: absolutePoint.x,
-              top: absolutePoint.y,
-              angle: (item.angle || 0) + (group.angle || 0),
-              scaleX: (item.scaleX || 1) * (group.scaleX || 1),
-              scaleY: (item.scaleY || 1) * (group.scaleY || 1),
-            });
+            undo: () => {
+              const currentGroup = canvas.getActiveObject();
+              if (currentGroup?.type === 'group') {
+                const items = (currentGroup as fabric.Group).getObjects();
+                canvas.remove(currentGroup);
 
-            item.setCoords();
-            canvasInstance.add(item);
+                // Add items back
+                items.forEach((item, i) => {
+                  canvas.add(item);
+                });
+
+                canvas.requestRenderAll();
+              }
+            },
           });
-
-          canvasInstance.requestRenderAll();
-          console.log('Ungrouped without position change');
         }
         break;
+      }
 
+      case "ungroup":
+        if (selectedObject?.type === "group" && canvasInstance && manager) {
+          const canvas = canvasInstance;
+          const group = selectedObject as fabric.Group;
 
-      case "group":
-        const activeObjects = canvasInstance?.getActiveObjects() || [];
-        if (activeObjects.length > 1 && canvasInstance) {
-          // FIXED: Preserve absolute positions
-          const group = new fabric.Group(activeObjects, {
-            // Keep objects at their current canvas positions
-            interactive: true,
+          const groupIndex = canvas.getObjects().indexOf(group);
+          const storedGroup = group; // Store reference
+
+          manager.execute({
+            do: () => {
+              // Get items before removing
+              const items = storedGroup.getObjects().slice();
+              const gLeft = storedGroup.left || 0;
+              const gTop = storedGroup.top || 0;
+
+              // Remove group first
+              canvas.remove(storedGroup);
+
+              // Add items back with adjusted positions
+              items.forEach((item) => {
+                const iLeft = item.left || 0;
+                const iTop = item.top || 0;
+
+                // Set absolute position
+                if (typeof item.set === 'function') {
+                  item.set({
+                    left: gLeft + iLeft,
+                    top: gTop + iTop,
+                  });
+                } else {
+                  (item as any).left = gLeft + iLeft;
+                  (item as any).top = gTop + iTop;
+                }
+
+                canvas.add(item);
+              });
+
+              canvas.discardActiveObject();
+              canvas.requestRenderAll();
+
+              setSnackbar({
+                open: true,
+                message: `Ungrouped ${items.length} objects`,
+                severity: 'success'
+              });
+            },
+
+            undo: () => {
+              const items = canvas.getObjects().slice(groupIndex, groupIndex + storedGroup.getObjects().length);
+
+              // Remove ungrouped items
+              items.forEach(item => canvas.remove(item));
+
+              // Re-add group
+              canvas.add(storedGroup);
+              canvas.setActiveObject(storedGroup);
+              canvas.requestRenderAll();
+            },
           });
-
-          // Remove individual objects
-          activeObjects.forEach(obj => canvasInstance.remove(obj));
-
-          // Add group
-          canvasInstance.add(group);
-          canvasInstance.setActiveObject(group);
-          canvasInstance.requestRenderAll();
-
-          console.log('Grouped without position change');
         }
         break;
       case "lock":
-        selectedObject.set({
-          selectable: true,
-          evented: true,
-          hasControls: false,
-          hasBorders: false,
-          lockMovementX: true,
-          lockMovementY: true,
-          lockScalingX: true,
-          lockScalingY: true,
-          lockRotation: true,
-          hoverCursor: "not-allowed",
-        });
-        (selectedObject as any).locked = true;
-        canvasInstance.setActiveObject(selectedObject);
-        setSelectedObject(selectedObject);
-        canvasInstance.requestRenderAll();
+        if (manager) {
+          const obj = selectedObject;
+          const prev = {
+            hasControls: obj.hasControls,
+            hasBorders: obj.hasBorders,
+            lockMovementX: obj.lockMovementX,
+            lockMovementY: obj.lockMovementY,
+            lockScalingX: obj.lockScalingX,
+            lockScalingY: obj.lockScalingY,
+            lockRotation: obj.lockRotation,
+            hoverCursor: obj.hoverCursor,
+            selectable: obj.selectable,
+            evented: obj.evented,
+            locked: (obj as any).locked,
+          } as any;
+          manager.execute({
+            do: () => {
+              obj.set({
+                selectable: true,
+                evented: true,
+                hasControls: false,
+                hasBorders: false,
+                lockMovementX: true,
+                lockMovementY: true,
+                lockScalingX: true,
+                lockScalingY: true,
+                lockRotation: true,
+                hoverCursor: "not-allowed",
+              });
+              (obj as any).locked = true;
+              canvasInstance.setActiveObject(obj);
+              setSelectedObject(obj);
+              canvasInstance.requestRenderAll();
+            },
+            undo: () => {
+              obj.set(prev);
+              (obj as any).locked = prev.locked;
+              canvasInstance.setActiveObject(obj);
+              setSelectedObject(obj);
+              canvasInstance.requestRenderAll();
+            }
+          });
+        }
         break;
       case "unlock":
-        selectedObject.set({
-          selectable: true,
-          evented: true,
-          hasControls: true,
-          hasBorders: true,
-          lockMovementX: false,
-          lockMovementY: false,
-          lockScalingX: false,
-          lockScalingY: false,
-          lockRotation: false,
-          hoverCursor: "move",
+        if (manager) {
+          const obj = selectedObject;
+          const prev = {
+            hasControls: obj.hasControls,
+            hasBorders: obj.hasBorders,
+            lockMovementX: obj.lockMovementX,
+            lockMovementY: obj.lockMovementY,
+            lockScalingX: obj.lockScalingX,
+            lockScalingY: obj.lockScalingY,
+            lockRotation: obj.lockRotation,
+            hoverCursor: obj.hoverCursor,
+            selectable: obj.selectable,
+            evented: obj.evented,
+            locked: (obj as any).locked,
+          } as any;
+          manager.execute({
+            do: () => {
+              obj.set({
+                selectable: true,
+                evented: true,
+                hasControls: true,
+                hasBorders: true,
+                lockMovementX: false,
+                lockMovementY: false,
+                lockScalingX: false,
+                lockScalingY: false,
+                lockRotation: false,
+                hoverCursor: "move",
+              });
+              (obj as any).locked = false;
+              canvasInstance.setActiveObject(obj);
+              setSelectedObject(obj);
+              canvasInstance.requestRenderAll();
+            },
+            undo: () => {
+              obj.set(prev);
+              (obj as any).locked = prev.locked;
+              canvasInstance.setActiveObject(obj);
+              setSelectedObject(obj);
+              canvasInstance.requestRenderAll();
+            }
+          });
+        }
+        break;
+      case "bringForward": {
+        console.log('[Layer] bringForward handler reached');
+        if (!canvasInstance || !manager) break;
+        const canvas = canvasInstance;
+        if (!active) {
+          setSnackbar({ open: true, message: "Select an object first", severity: "info" });
+          break;
+        }
+
+        const objects = canvas.getObjects();
+        const prevIndex = objects.indexOf(active);
+        if (prevIndex === -1) break;
+
+        const newIndex = Math.min(prevIndex + 1, objects.length - 1);
+        if (prevIndex === newIndex) {
+          setSnackbar({ open: true, message: "Object is already at the top layer", severity: "info" });
+          break;
+        }
+
+        manager.execute({
+          do: () => {
+            moveObjectToIndex(canvas, active, newIndex);
+            canvas.setActiveObject(active);
+            setSelectedObject(active);
+          },
+          undo: () => {
+            moveObjectToIndex(canvas, active, prevIndex);
+            canvas.setActiveObject(active);
+            setSelectedObject(active);
+          },
         });
-        (selectedObject as any).locked = false;
-        canvasInstance.setActiveObject(selectedObject);
-        setSelectedObject(selectedObject);
-        canvasInstance.requestRenderAll();
+        setSnackbar({ open: true, message: "Object moved forward", severity: "success" });
         break;
-      case "bringForward":
-        setAction({ type: "BRING_FORWARD", payload: selectedObject });
+      }
+
+      case "sendBackward": {
+        if (!canvasInstance || !manager) break;
+        const canvas = canvasInstance;
+        if (!active) {
+          setSnackbar({ open: true, message: "Select an object first", severity: "info" });
+          break;
+        }
+
+        const objects = canvas.getObjects();
+        const prevIndex = objects.indexOf(active);
+        if (prevIndex === -1) break;
+
+        const newIndex = Math.max(prevIndex - 1, 0);
+        if (prevIndex === newIndex) {
+          setSnackbar({ open: true, message: "Object is already at the bottom layer", severity: "info" });
+          break;
+        }
+
+        manager.execute({
+          do: () => {
+            moveObjectToIndex(canvas, active, newIndex);
+            canvas.setActiveObject(active);
+            setSelectedObject(active);
+          },
+          undo: () => {
+            moveObjectToIndex(canvas, active, prevIndex);
+            canvas.setActiveObject(active);
+            setSelectedObject(active);
+          },
+        });
+        setSnackbar({ open: true, message: "Object moved backward", severity: "success" });
         break;
-      case "bringToFront":
-        setAction({ type: "BRING_TO_FRONT", payload: selectedObject });
+      }
+
+      case "bringToFront": {
+        if (!canvasInstance || !manager) break;
+        const canvas = canvasInstance;
+        if (!active) {
+          setSnackbar({ open: true, message: "Select an object first", severity: "info" });
+          break;
+        }
+
+        const objects = canvas.getObjects();
+        const prevIndex = objects.indexOf(active);
+        if (prevIndex === -1) break;
+
+        const newIndex = objects.length - 1;
+        if (prevIndex === newIndex) {
+          setSnackbar({ open: true, message: "Object is already at the front", severity: "info" });
+          break;
+        }
+
+        manager.execute({
+          do: () => {
+            moveObjectToIndex(canvas, active, newIndex);
+            canvas.setActiveObject(active);
+            setSelectedObject(active);
+          },
+          undo: () => {
+            moveObjectToIndex(canvas, active, prevIndex);
+            canvas.setActiveObject(active);
+            setSelectedObject(active);
+          },
+        });
+        setSnackbar({ open: true, message: "Object brought to front", severity: "success" });
         break;
-      case "sendBackward":
-        setAction({ type: "SEND_BACKWARD", payload: selectedObject });
+      }
+
+      case "sendToBack": {
+        if (!canvasInstance || !manager) break;
+        const canvas = canvasInstance;
+        if (!active) {
+          setSnackbar({ open: true, message: "Select an object first", severity: "info" });
+          break;
+        }
+
+        const objects = canvas.getObjects();
+        const prevIndex = objects.indexOf(active);
+        if (prevIndex === -1) break;
+
+        const newIndex = 0;
+        if (prevIndex === newIndex) {
+          setSnackbar({ open: true, message: "Object is already at the back", severity: "info" });
+          break;
+        }
+
+        manager.execute({
+          do: () => {
+            moveObjectToIndex(canvas, active, newIndex);
+            canvas.setActiveObject(active);
+            setSelectedObject(active);
+          },
+          undo: () => {
+            moveObjectToIndex(canvas, active, prevIndex);
+            canvas.setActiveObject(active);
+            setSelectedObject(active);
+          },
+        });
+        setSnackbar({ open: true, message: "Object sent to back", severity: "success" });
         break;
-      case "sendToBack":
-        setAction({ type: "SEND_TO_BACK", payload: selectedObject });
-        break;
+
+      }
     }
     handleCloseContextMenu();
   };
@@ -476,33 +948,44 @@ useEffect(() => {
   };
 
   const handleAlignAction = (align: string) => {
-    if (!canvasInstance || !selectedObject) return;
+    if (!canvasInstance || !selectedObject || !manager) return;
     const canvasWidth = canvasInstance.getWidth();
     const canvasHeight = canvasInstance.getHeight();
     const objWidth = selectedObject.getScaledWidth();
     const objHeight = selectedObject.getScaledHeight();
 
-    switch (align) {
-      case "left":
-        selectedObject.set({ left: 0 });
-        break;
-      case "center":
-        selectedObject.set({ left: (canvasWidth - objWidth) / 2 });
-        break;
-      case "right":
-        selectedObject.set({ left: canvasWidth - objWidth });
-        break;
-      case "top":
-        selectedObject.set({ top: 0 });
-        break;
-      case "middle":
-        selectedObject.set({ top: (canvasHeight - objHeight) / 2 });
-        break;
-      case "bottom":
-        selectedObject.set({ top: canvasHeight - objHeight });
-        break;
-    }
-    canvasInstance.requestRenderAll();
+    const prev = { left: selectedObject.left, top: selectedObject.top } as any;
+
+    manager.execute({
+      do: () => {
+        switch (align) {
+          case "left":
+            selectedObject.set({ left: 0 });
+            break;
+          case "center":
+            selectedObject.set({ left: (canvasWidth - objWidth) / 2 });
+            break;
+          case "right":
+            selectedObject.set({ left: canvasWidth - objWidth });
+            break;
+          case "top":
+            selectedObject.set({ top: 0 });
+            break;
+          case "middle":
+            selectedObject.set({ top: (canvasHeight - objHeight) / 2 });
+            break;
+          case "bottom":
+            selectedObject.set({ top: canvasHeight - objHeight });
+            break;
+        }
+        canvasInstance.requestRenderAll();
+      },
+      undo: () => {
+        selectedObject.set(prev);
+        canvasInstance.requestRenderAll();
+      }
+    });
+
     handleCloseAlignMenu();
   };
 
@@ -577,18 +1060,19 @@ useEffect(() => {
         return;
       }
 
-      // Select All
       if (e.ctrlKey && e.key.toLowerCase() === "a") {
         e.preventDefault();
         canvasInstance.discardActiveObject();
-        const sel = new fabric.ActiveSelection(
-          canvasInstance.getObjects(),
-          { canvas: canvasInstance }
-        );
-        canvasInstance.setActiveObject(sel);
-        canvasInstance.requestRenderAll();
-      }
 
+        const all = canvasInstance.getObjects();
+        if (all.length > 0) {
+          const sel = new fabric.ActiveSelection(all, { canvas: canvasInstance });
+          canvasInstance.setActiveObject(sel);
+        }
+
+        canvasInstance.requestRenderAll();
+        return;
+      }
       // Copy
       if (e.ctrlKey && e.key.toLowerCase() === "c") {
         e.preventDefault();
@@ -633,6 +1117,22 @@ useEffect(() => {
   };
 
 
+
+
+  useEffect(() => {
+    if (activePageIndex >= 0 && pages[activePageIndex]) {
+      const pageId = pages[activePageIndex].id;
+      setCurrentPageForBg(pageId);
+
+      // Update background color display
+      const canvas = canvases.get(pageId);
+      if (canvas) {
+        setCurrentBgColor(canvas.backgroundColor || 'white');
+      }
+    }
+  }, [activePageIndex, pages, canvases]);
+
+
   // Generate thumbnail
   const generateThumbnailFromCanvas = async (canvas: fabric.Canvas) => {
     try {
@@ -645,84 +1145,101 @@ useEffect(() => {
   };
 
   //new 
-const handleCanvasReady = (pageId: string, canvas: fabric.Canvas) => {
-  console.log(` Registering canvas for page: ${pageId}`);
-  
-  // FIX: Check if already exists, dispose old one
-  const existingCanvas = canvases.get(pageId);
-  if (existingCanvas) {
-    console.log(` Canvas already exists for ${pageId}, disposing old one`);
-    try {
-      if (existingCanvas.upperCanvasEl) {
-        existingCanvas.off();
+  const handleCanvasReady = (pageId: string, canvas: fabric.Canvas) => {
+    console.log(`📝 Registering canvas for page: ${pageId}`);
+
+    // ✅ CRITICAL: Check if canvas already exists for this page
+    const existingCanvas = canvases.get(pageId);
+    if (existingCanvas && existingCanvas !== canvas) {
+      console.log(`⚠️ Duplicate canvas detected for ${pageId}, disposing old one`);
+      try {
+        // Mark as disposing
+        (existingCanvas as any)._isDisposing = true;
+
+        // Stop operations
+        if ((existingCanvas as any).cancelRequestedRender) {
+          (existingCanvas as any).cancelRequestedRender();
+        }
+
+        // Check if still valid
+        if (existingCanvas.upperCanvasEl) {
+          existingCanvas.off?.();
+          existingCanvas.clear?.();
+
+          setTimeout(() => {
+            try {
+              if (existingCanvas.dispose && existingCanvas.upperCanvasEl) {
+                existingCanvas.dispose();
+                console.log(`✅ Old canvas disposed for ${pageId}`);
+              }
+            } catch (e) {
+              console.warn('Old canvas disposal warning:', e);
+            }
+          }, 50);
+        }
+      } catch (e) {
+        console.warn('Existing canvas cleanup warning:', e);
       }
-      existingCanvas.clear();
-      if (existingCanvas.dispose) {
-        existingCanvas.dispose();
+    }
+
+    // Register new canvas
+    setCanvases(prev => {
+      const updated = new Map(prev);
+      updated.set(pageId, canvas);
+      return updated;
+    });
+
+    // Create command manager
+    const mgr = new CommandManager(canvas);
+    setManagers(prev => {
+      const updated = new Map(prev);
+      updated.set(pageId, mgr);
+      return updated;
+    });
+
+    // Setup auto-save with delay
+    setTimeout(() => {
+      canvas.on('object:modified', () => triggerAutoSave(pageId));
+      canvas.on('object:added', () => triggerAutoSave(pageId));
+      canvas.on('object:removed', () => triggerAutoSave(pageId));
+    }, 500);
+
+    // Selection tracking
+    canvas.on('selection:created', (e) => {
+      if (e.selected && e.selected[0]) {
+        setSelectedObject(e.selected[0]);
       }
-    } catch (e) {
-      console.warn('Old canvas disposal error:', e);
-    }
-  }
+    });
 
-  // Register new canvas
-  setCanvases(prev => {
-    const updated = new Map(prev);
-    updated.set(pageId, canvas);
-    return updated;
-  });
+    canvas.on('selection:updated', (e) => {
+      if (e.selected && e.selected[0]) {
+        setSelectedObject(e.selected[0]);
+      }
+    });
 
-  // Create command manager
-  const mgr = new CommandManager(canvas);
-  setManagers(prev => {
-    const updated = new Map(prev);
-    updated.set(pageId, mgr);
-    return updated;
-  });
+    canvas.on('selection:cleared', () => {
+      setSelectedObject(null);
+    });
 
-  // Delay auto-save setup to prevent immediate triggers
-  setTimeout(() => {
-    canvas.on('object:modified', () => triggerAutoSave(pageId));
-    canvas.on('object:added', () => triggerAutoSave(pageId));
-    canvas.on('object:removed', () => triggerAutoSave(pageId));
-  }, 500);
-
-  // Selection tracking
-  canvas.on('selection:created', (e) => {
-    if (e.selected && e.selected[0]) {
-      setSelectedObject(e.selected[0]);
-    }
-  });
-
-  canvas.on('selection:updated', (e) => {
-    if (e.selected && e.selected[0]) {
-      setSelectedObject(e.selected[0]);
-    }
-  });
-
-  canvas.on('selection:cleared', () => {
-    setSelectedObject(null);
-  });
-
-  console.log(`Canvas registered for page: ${pageId}`);
-};
+    console.log(`✅ Canvas registered for page: ${pageId}`);
+  };
 
   // NEW: Auto-save with debounce
-const triggerAutoSave = (pageId: string) => {
-  // FIX: Don't auto-save during template load
-  if (isLoadingProject) {
-    console.log('⏸Skipping auto-save during load');
-    return;
-  }
-  
-  if (autoSaveTimers.current[pageId]) {
-    clearTimeout(autoSaveTimers.current[pageId]);
-  }
+  const triggerAutoSave = (pageId: string) => {
+    // FIX: Don't auto-save during template load
+    if (isLoadingProject) {
+      console.log('⏸Skipping auto-save during load');
+      return;
+    }
 
-  autoSaveTimers.current[pageId] = setTimeout(() => {
-    savePageData(pageId);
-  }, 1500);
-};
+    if (autoSaveTimers.current[pageId]) {
+      clearTimeout(autoSaveTimers.current[pageId]);
+    }
+
+    autoSaveTimers.current[pageId] = setTimeout(() => {
+      savePageData(pageId);
+    }, 1500);
+  };
 
   //  NEW: Save individual page
   const savePageData = (pageId: string) => {
@@ -755,35 +1272,35 @@ const triggerAutoSave = (pageId: string) => {
   const handlePageUpdate = (pageId: string) => {
     triggerAutoSave(pageId);
   };
-const handleAddPage = () => {
-  const newPage: PageItem = {
-    id: uuidv4(),
-    name: `Page ${pages.length + 1}`,
-    fabricJSON: {
-      version: "5.3.0",
-      objects: [],
-      background: "white",
-      width: canvasSize.width,
-      height: canvasSize.height,
-    },
-    thumbnail: null,
-    locked: false,
+  const handleAddPage = () => {
+    const newPage: PageItem = {
+      id: uuidv4(),
+      name: `Page ${pages.length + 1}`,
+      fabricJSON: {
+        version: "5.3.0",
+        objects: [],
+        background: "white",
+        width: canvasSize.width,
+        height: canvasSize.height,
+      },
+      thumbnail: null,
+      locked: false,
+    };
+
+    // FIX: Add page and wait for React to render
+    setPages(prev => {
+      const copy = [...prev];
+      copy.splice(activePageIndex + 1, 0, newPage);
+      return copy;
+    });
+
+    // Wait for render, then activate
+    setTimeout(() => {
+      setActivePageIndex(activePageIndex + 1);
+      setActivePageId(newPage.id);
+      console.log(` Added page ${activePageIndex + 2}`);
+    }, 100);
   };
-
-  // FIX: Add page and wait for React to render
-  setPages(prev => {
-    const copy = [...prev];
-    copy.splice(activePageIndex + 1, 0, newPage);
-    return copy;
-  });
-
-  // Wait for render, then activate
-  setTimeout(() => {
-    setActivePageIndex(activePageIndex + 1);
-    setActivePageId(newPage.id);
-    console.log(` Added page ${activePageIndex + 2}`);
-  }, 100);
-};
 
   // UPDATED: Duplicate page
   const handleDuplicatePage = (index: number) => {
@@ -859,156 +1376,388 @@ const handleAddPage = () => {
 
     console.log(` Toggled lock for page ${index + 1}`);
   };
+
+  //   const handleSave = async () => {
+  //   if (!user) return;
+
+  //   if (!templateName.trim()) {
+  //     setSnackbar({
+  //       open: true,
+  //       message: "Please enter a template name",
+  //       severity: "error",
+  //     });
+  //     return;
+  //   }
+
+  //   setSaving(true);
+
+  //   try {
+  //     console.log(`💾 Saving project with ${pages.length} pages...`);
+
+  //     // ✅ Save all canvases WITH SVG METADATA
+  //     const pagesPayload = await Promise.all(
+  //       pages.map(async (page) => {
+  //         const canvas = canvases.get(page.id);
+
+  //         let fabricJSON = page.fabricJSON;
+  //         let thumbnail = page.thumbnail;
+
+  //         // Get fresh data from canvas
+  //         if (canvas) {
+  //           fabricJSON = canvas.toJSON();
+
+  //           // ✅ PRESERVE SVG METADATA before saving
+  //           const canvasObjects = canvas.getObjects();
+  //           canvasObjects.forEach((obj: any, idx: number) => {
+  //             if (fabricJSON.objects[idx] && obj.isEditableSVG) {
+  //               console.log(`💾 Preserving SVG metadata for object ${idx}`);
+
+  //               fabricJSON.objects[idx].isEditableSVG = true;
+  //               fabricJSON.objects[idx].svgPaths = obj.svgPaths;
+
+  //               // Preserve editableFill for each path
+  //               if (obj.svgPaths && Array.isArray(obj.svgPaths)) {
+  //                 obj.svgPaths.forEach((path: any, pathIdx: number) => {
+  //                   if (fabricJSON.objects[idx].objects && fabricJSON.objects[idx].objects[pathIdx]) {
+  //                     fabricJSON.objects[idx].objects[pathIdx].editableFill = path.fill;
+  //                   }
+  //                 });
+  //               }
+  //             }
+  //           });
+
+  //           console.log(`📄 Page ${page.name}: ${fabricJSON?.objects?.length || 0} objects`);
+
+  //           try {
+  //             thumbnail = canvas.toDataURL({
+  //               format: 'png',
+  //               quality: 0.5,
+  //               multiplier: 0.25
+  //             });
+  //           } catch (err) {
+  //             console.warn(`⚠️ Failed to generate thumbnail for ${page.name}`);
+  //           }
+  //         } else {
+  //           console.warn(`⚠️ No canvas for page ${page.name}, using stored data`);
+  //         }
+
+  //         // Ensure valid fabricJSON
+  //         if (!fabricJSON || typeof fabricJSON !== 'object') {
+  //           fabricJSON = {
+  //             version: "5.3.0",
+  //             objects: [],
+  //             background: "white",
+  //             width: canvasSize.width,
+  //             height: canvasSize.height,
+  //           };
+  //         }
+
+  //         if (!fabricJSON.width) fabricJSON.width = canvasSize.width;
+  //         if (!fabricJSON.height) fabricJSON.height = canvasSize.height;
+
+  //         return {
+  //           id: page.id,
+  //           name: page.name,
+  //           fabricJSON: fabricJSON,
+  //           thumbnail: thumbnail,
+  //           locked: page.locked || false,
+  //         };
+  //       })
+  //     );
+
+  //     // Verify data
+  //     console.log(`✅ Prepared ${pagesPayload.length} pages for save:`);
+  //     pagesPayload.forEach((p, i) => {
+  //       console.log(`Page ${i + 1}: ${p.fabricJSON?.objects?.length || 0} objects`);
+  //     });
+
+  //     const canvasData: any = {
+  //       name: templateName,
+  //       category: isAdmin ? (templateCategory || undefined) : undefined,
+  //       size: canvasSize,
+  //       pages: pagesPayload,
+  //       thumbnail: pagesPayload[0]?.thumbnail,
+  //     };
+
+  //     // API calls (rest same as before)
+  //     if (isAdmin) {
+  //       if (currentTemplateId && isEditingTemplate) {
+  //         await templateApi.updateTemplate(currentTemplateId, canvasData);
+  //         setSnackbar({
+  //           open: true,
+  //           message: "Template updated successfully!",
+  //           severity: "success"
+  //         });
+  //       } else {
+  //         const response = await templateApi.createTemplate(canvasData);
+  //         setCurrentTemplateId(response.id);
+  //         setIsEditingTemplate(true);
+  //         setSnackbar({
+  //           open: true,
+  //           message: "Template created successfully!",
+  //           severity: "success"
+  //         });
+  //       }
+  //     } else {
+  //       if (baseAdminTemplateId && !isEditingTemplate) {
+  //         const copiedTemplate = await templateApi.copyTemplateToMyProjects(baseAdminTemplateId);
+  //         const updatedTemplate = await templateApi.updateUserTemplate(copiedTemplate.id, canvasData);
+  //         setCurrentTemplateId(updatedTemplate.id);
+  //         setIsEditingTemplate(true);
+  //         setBaseAdminTemplateId(null);
+  //         setSnackbar({
+  //           open: true,
+  //           message: "Template copied and saved!",
+  //           severity: "success"
+  //         });
+  //       } else if (currentTemplateId && isEditingTemplate) {
+  //         await templateApi.updateUserTemplate(currentTemplateId, canvasData);
+  //         setSnackbar({
+  //           open: true,
+  //           message: "Project updated successfully!",
+  //           severity: "success"
+  //         });
+  //       } else {
+  //         const response = await templateApi.createUserTemplate({
+  //           ...canvasData,
+  //           baseTemplateId: undefined,
+  //         });
+  //         setCurrentTemplateId(response.id);
+  //         setIsEditingTemplate(true);
+  //         setSnackbar({
+  //           open: true,
+  //           message: "Project saved successfully!",
+  //           severity: "success"
+  //         });
+  //       }
+  //     }
+
+  //     setSaveDialogOpen(false);
+  //     window.dispatchEvent(new Event('refreshProjects'));
+  //     window.dispatchEvent(new Event('refreshTemplates'));
+
+  //   } catch (error: any) {
+  //     console.error('❌ Save error:', error);
+  //     setSnackbar({
+  //       open: true,
+  //       message: error?.response?.data?.message || "Save failed. Check console.",
+  //       severity: "error"
+  //     });
+  //   } finally {
+  //     setSaving(false);
+  //   }
+  // };
+
+
+
+
+
   const handleSave = async () => {
-  if (!user) return;
+    if (!user) return;
 
-  if (!templateName.trim()) {
-    setSnackbar({
-      open: true,
-      message: "Please enter a template name",
-      severity: "error",
-    });
-    return;
-  }
-
-  setSaving(true);
-
-  try {
-    console.log(`Saving project with ${pages.length} pages...`);
-
-    // Save all canvases WITH OBJECTS
-    const pagesPayload = await Promise.all(
-      pages.map(async (page) => {
-        const canvas = canvases.get(page.id);
-
-        let fabricJSON = page.fabricJSON;
-        let thumbnail = page.thumbnail;
-
-        // CRITICAL: Get fresh data from canvas
-        if (canvas) {
-          fabricJSON = canvas.toJSON();
-          
-          // Verify objects exist
-          console.log(`Page ${page.name}: ${fabricJSON?.objects?.length || 0} objects`);
-          
-          try {
-            thumbnail = canvas.toDataURL({
-              format: 'png',
-              quality: 0.5,
-              multiplier: 0.25
-            });
-          } catch (err) {
-            console.warn(`Failed to generate thumbnail for ${page.name}`);
-          }
-        } else {
-          console.warn(`No canvas for page ${page.name}, using stored data`);
-        }
-
-        // Ensure valid fabricJSON with objects
-        if (!fabricJSON || typeof fabricJSON !== 'object') {
-          fabricJSON = {
-            version: "5.3.0",
-            objects: [],
-            background: "white",
-            width: canvasSize.width,
-            height: canvasSize.height,
-          };
-        }
-
-        if (!fabricJSON.width) fabricJSON.width = canvasSize.width;
-        if (!fabricJSON.height) fabricJSON.height = canvasSize.height;
-
-        return {
-          id: page.id,
-          name: page.name,
-          fabricJSON: fabricJSON,
-          thumbnail: thumbnail,
-          locked: page.locked || false,
-        };
-      })
-    );
-
-    // Verify data before saving
-    console.log(` Prepared ${pagesPayload.length} pages for save:`);
-    pagesPayload.forEach((p, i) => {
-      console.log(`Page ${i + 1}: ${p.fabricJSON?.objects?.length || 0} objects`);
-    });
-
-    const canvasData: any = {
-      name: templateName,
-      category: isAdmin ? (templateCategory || undefined) : undefined,
-      size: canvasSize,
-      pages: pagesPayload, 
-      thumbnail: pagesPayload[0]?.thumbnail,
-    };
-
-    // API calls
-    if (isAdmin) {
-      if (currentTemplateId && isEditingTemplate) {
-        await templateApi.updateTemplate(currentTemplateId, canvasData);
-        setSnackbar({
-          open: true,
-          message: "Template updated successfully!",
-          severity: "success"
-        });
-      } else {
-        const response = await templateApi.createTemplate(canvasData);
-        setCurrentTemplateId(response.id);
-        setIsEditingTemplate(true);
-        setSnackbar({
-          open: true,
-          message: "Template created successfully!",
-          severity: "success"
-        });
-      }
-    } else {
-      if (baseAdminTemplateId && !isEditingTemplate) {
-        const copiedTemplate = await templateApi.copyTemplateToMyProjects(baseAdminTemplateId);
-        const updatedTemplate = await templateApi.updateUserTemplate(copiedTemplate.id, canvasData);
-        setCurrentTemplateId(updatedTemplate.id);
-        setIsEditingTemplate(true);
-        setBaseAdminTemplateId(null);
-        setSnackbar({
-          open: true,
-          message: "Template copied and saved!",
-          severity: "success"
-        });
-      } else if (currentTemplateId && isEditingTemplate) {
-        await templateApi.updateUserTemplate(currentTemplateId, canvasData);
-        setSnackbar({
-          open: true,
-          message: "Project updated successfully!",
-          severity: "success"
-        });
-      } else {
-        const response = await templateApi.createUserTemplate({
-          ...canvasData,
-          baseTemplateId: undefined,
-        });
-        setCurrentTemplateId(response.id);
-        setIsEditingTemplate(true);
-        setSnackbar({
-          open: true,
-          message: "Project saved successfully!",
-          severity: "success"
-        });
-      }
+    if (!templateName.trim()) {
+      setSnackbar({
+        open: true,
+        message: "Please enter a template name",
+        severity: "error",
+      });
+      return;
     }
 
-    setSaveDialogOpen(false);
-    window.dispatchEvent(new Event('refreshProjects'));
+    setSaving(true);
 
-  } catch (error: any) {
-    console.error(' Save error:', error);
-    setSnackbar({
-      open: true,
-      message: error?.response?.data?.message || "Save failed. Check console.",
-      severity: "error"
-    });
-  } finally {
-    setSaving(false);
-  }
-};
+    try {
+      console.log(`💾 Saving project with ${pages.length} pages...`);
+
+      // ✅ Check if template name already exists
+      const existingTemplates = isAdmin
+        ? await templateApi.getAllTemplates()
+        : await templateApi.getMyTemplates();
+
+      const duplicateTemplate = existingTemplates.find(
+        (t: any) =>
+          t.name.toLowerCase() === templateName.toLowerCase() &&
+          t.id !== currentTemplateId
+      );
+
+      // ✅ Show confirmation dialog if duplicate found
+      if (duplicateTemplate && !isEditingTemplate) {
+        const userConfirmed = window.confirm(
+          `⚠️ Template "${templateName}" already exists!\n\n` +
+          `Do you want to replace it?\n\n` +
+          `Click OK to replace, or Cancel to keep both.`
+        );
+
+        if (!userConfirmed) {
+          setSaving(false);
+          setSnackbar({
+            open: true,
+            message: "Save cancelled by user",
+            severity: "info",
+          });
+          return;
+        }
+
+        // Delete existing template
+        if (isAdmin) {
+          await templateApi.deleteTemplate(duplicateTemplate.id);
+        } else {
+          await templateApi.deleteUserTemplate(duplicateTemplate.id);
+        }
+
+        console.log(`Deleted existing template: ${duplicateTemplate.name}`);
+      }
+
+      // Save all canvases WITH SVG METADATA (existing code continues...)
+      const pagesPayload = await Promise.all(
+        pages.map(async (page) => {
+          const canvas = canvases.get(page.id);
+
+          let fabricJSON = page.fabricJSON;
+          let thumbnail = page.thumbnail;
+
+          if (canvas) {
+            fabricJSON = canvas.toJSON();
+
+            // Preserve SVG metadata
+            const canvasObjects = canvas.getObjects();
+            canvasObjects.forEach((obj: any, idx: number) => {
+              if (fabricJSON.objects[idx] && obj.isEditableSVG) {
+                console.log(`💾 Preserving SVG metadata for object ${idx}`);
+
+                fabricJSON.objects[idx].isEditableSVG = true;
+                fabricJSON.objects[idx].svgPaths = obj.svgPaths;
+
+                if (obj.svgPaths && Array.isArray(obj.svgPaths)) {
+                  obj.svgPaths.forEach((path: any, pathIdx: number) => {
+                    if (fabricJSON.objects[idx].objects && fabricJSON.objects[idx].objects[pathIdx]) {
+                      fabricJSON.objects[idx].objects[pathIdx].editableFill = path.fill;
+                    }
+                  });
+                }
+              }
+            });
+
+            console.log(`📄 Page ${page.name}: ${fabricJSON?.objects?.length || 0} objects`);
+
+            try {
+              thumbnail = canvas.toDataURL({
+                format: 'png',
+                quality: 0.5,
+                multiplier: 0.25
+              });
+            } catch (err) {
+              console.warn(`⚠️ Failed to generate thumbnail for ${page.name}`);
+            }
+          }
+
+          if (!fabricJSON || typeof fabricJSON !== 'object') {
+            fabricJSON = {
+              version: "5.3.0",
+              objects: [],
+              background: "white",
+              width: canvasSize.width,
+              height: canvasSize.height,
+            };
+          }
+
+          if (!fabricJSON.width) fabricJSON.width = canvasSize.width;
+          if (!fabricJSON.height) fabricJSON.height = canvasSize.height;
+
+          return {
+            id: page.id,
+            name: page.name,
+            fabricJSON: fabricJSON,
+            thumbnail: thumbnail,
+            locked: page.locked || false,
+          };
+        })
+      );
+
+      console.log(`✅ Prepared ${pagesPayload.length} pages for save`);
+
+      const canvasData: any = {
+        name: templateName,
+        category: isAdmin ? (templateCategory.toLowerCase() || undefined) : undefined, // ✅ Save in lowercase
+        size: canvasSize,
+        pages: pagesPayload,
+        thumbnail: pagesPayload[0]?.thumbnail,
+      };
+
+      // API calls
+      if (isAdmin) {
+        if (currentTemplateId && isEditingTemplate) {
+          await templateApi.updateTemplate(currentTemplateId, canvasData);
+          setSnackbar({
+            open: true,
+            message: "Template updated successfully!",
+            severity: "success"
+          });
+        } else {
+          const response = await templateApi.createTemplate(canvasData);
+          setCurrentTemplateId(response.id);
+          setIsEditingTemplate(true);
+          setSnackbar({
+            open: true,
+            message: duplicateTemplate
+              ? "Template replaced successfully!"
+              : "Template created successfully!",
+            severity: "success"
+          });
+        }
+      } else {
+        if (baseAdminTemplateId && !isEditingTemplate) {
+          const copiedTemplate = await templateApi.copyTemplateToMyProjects(baseAdminTemplateId);
+          const updatedTemplate = await templateApi.updateUserTemplate(copiedTemplate.id, canvasData);
+          setCurrentTemplateId(updatedTemplate.id);
+          setIsEditingTemplate(true);
+          setBaseAdminTemplateId(null);
+          setSnackbar({
+            open: true,
+            message: "Template copied and saved!",
+            severity: "success"
+          });
+        } else if (currentTemplateId && isEditingTemplate) {
+          await templateApi.updateUserTemplate(currentTemplateId, canvasData);
+          setSnackbar({
+            open: true,
+            message: "Project updated successfully!",
+            severity: "success"
+          });
+        } else {
+          const response = await templateApi.createUserTemplate({
+            ...canvasData,
+            baseTemplateId: undefined,
+          });
+          setCurrentTemplateId(response.id);
+          setIsEditingTemplate(true);
+          setSnackbar({
+            open: true,
+            message: duplicateTemplate
+              ? "Project replaced successfully!"
+              : "Project saved successfully!",
+            severity: "success"
+          });
+        }
+      }
+
+      setSaveDialogOpen(false);
+      window.dispatchEvent(new Event('refreshProjects'));
+      window.dispatchEvent(new Event('refreshTemplates'));
+
+    } catch (error: any) {
+      console.error('❌ Save error:', error);
+      setSnackbar({
+        open: true,
+        message: error?.response?.data?.message || "Save failed. Check console.",
+        severity: "error"
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+
   const handleSaveClick = () => {
     if (!isAuthenticated) {
       setSnackbar({
@@ -1030,62 +1779,62 @@ const handleAddPage = () => {
     setSaveDialogOpen(true);
   };
 
- const handleNewTemplate = () => {
-  if (confirm("Create a new blank template? Unsaved changes will be lost.")) {
-    // FIXED: Safe disposal of all canvases
-    canvases.forEach((canvas, pageId) => {
-      try {
-        console.log(` Disposing canvas: ${pageId}`);
-        
-        // Check if canvas elements exist
-        if (canvas.upperCanvasEl) {
-          canvas.off(); // Remove all listeners
+  const handleNewTemplate = () => {
+    if (confirm("Create a new blank template? Unsaved changes will be lost.")) {
+      // FIXED: Safe disposal of all canvases
+      canvases.forEach((canvas, pageId) => {
+        try {
+          console.log(` Disposing canvas: ${pageId}`);
+
+          // Check if canvas elements exist
+          if (canvas.upperCanvasEl) {
+            canvas.off(); // Remove all listeners
+          }
+
+          canvas.clear(); // Clear objects
+
+          if (canvas.dispose) {
+            canvas.dispose(); // Dispose canvas
+          }
+        } catch (error) {
+          console.warn(`Canvas disposal warning for ${pageId}:`, error);
         }
-        
-        canvas.clear(); // Clear objects
-        
-        if (canvas.dispose) {
-          canvas.dispose(); // Dispose canvas
-        }
-      } catch (error) {
-        console.warn(`Canvas disposal warning for ${pageId}:`, error);
-      }
-    });
+      });
 
-    setCanvases(new Map());
-    setManagers(new Map());
+      setCanvases(new Map());
+      setManagers(new Map());
 
-    // Reset to single blank page
-    const blankPage: PageItem = {
-      id: uuidv4(),
-      name: "Page 1",
-      fabricJSON: {
-        version: "5.3.0",
-        objects: [],
-        background: "white",
-        width: canvasSize.width,
-        height: canvasSize.height,
-      },
-      thumbnail: null,
-      locked: false
-    };
+      // Reset to single blank page
+      const blankPage: PageItem = {
+        id: uuidv4(),
+        name: "Page 1",
+        fabricJSON: {
+          version: "5.3.0",
+          objects: [],
+          background: "white",
+          width: canvasSize.width,
+          height: canvasSize.height,
+        },
+        thumbnail: null,
+        locked: false
+      };
 
-    setPages([blankPage]);
-    setActivePageIndex(0);
-    setActivePageId(blankPage.id);
-    setCurrentTemplateId(null);
-    setTemplateName("");
-    setIsEditingTemplate(false);
-    setSelectedObject(null);
-    setContextMenu(null);
+      setPages([blankPage]);
+      setActivePageIndex(0);
+      setActivePageId(blankPage.id);
+      setCurrentTemplateId(null);
+      setTemplateName("");
+      setIsEditingTemplate(false);
+      setSelectedObject(null);
+      setContextMenu(null);
 
-    setSnackbar({
-      open: true,
-      message: "New blank canvas created",
-      severity: "success",
-    });
-  }
-};
+      setSnackbar({
+        open: true,
+        message: "New blank canvas created",
+        severity: "success",
+      });
+    }
+  };
 
   //  FIXED: Handlers with SVG double-click and background image support
   const handlers = {
@@ -1274,158 +2023,280 @@ const handleAddPage = () => {
       }
     },
     onAddShape: (payload: any) => {
-  if (payload && payload.type === "LOAD_TEMPLATE") {
-    const template = payload.template;
+      if (payload && payload.type === "LOAD_TEMPLATE") {
+        const template = payload.template;
 
-    console.log('Loading template:', template.name);
-    console.log('Template data:', template);
+        console.log('📂 Loading template:', template.name);
 
-    // Set loading state
-    setIsLoadingProject(true);
+        // ✅ Set loading state
+        setIsLoadingProject(true);
 
-    // Set canvas size FIRST
-    const newSize = {
-      width: template.size?.width || 800,
-      height: template.size?.height || 600
-    };
-
-    console.log(' New canvas size:', newSize);
-    setCanvasSize(newSize);
-
-    // Dispose all canvases
-    canvases.forEach((canvas, pageId) => {
-      try {
-        canvas.off();
-        canvas.clear();
-        canvas.dispose();
-      } catch (e) {
-        console.warn('Disposal error:', e);
-      }
-    });
-
-    setCanvases(new Map());
-    setManagers(new Map());
-
-    // BACKWARD COMPATIBILITY: Handle both formats
-    let templatePages = template.pages;
-
-    // Convert old format (elements) to new format (pages)
-    if (!templatePages && template.elements) {
-      console.log('Converting old format: elements → pages');
-      templatePages = [
-        {
-          id: uuidv4(),
-          name: 'Page 1',
-          fabricJSON: template.elements,
-          thumbnail: template.thumbnail,
-          locked: false
-        }
-      ];
-    }
-
-    // Parse pages
-    const loadedPages: PageItem[] = [];
-
-    if (templatePages && Array.isArray(templatePages) && templatePages.length > 0) {
-      templatePages.forEach((pg: any, i: number) => {
-        let fabricJSON = pg.fabricJSON || pg.json;
-
-        // Parse string JSON
-        if (typeof fabricJSON === 'string') {
-          try {
-            fabricJSON = JSON.parse(fabricJSON);
-          } catch (e) {
-            console.error(`Parse error page ${i}:`, e);
-            fabricJSON = null;
-          }
-        }
-
-        // Validate fabricJSON structure
-        if (!fabricJSON || typeof fabricJSON !== 'object') {
-          fabricJSON = {
-            version: "5.3.0",
-            objects: [],
-            background: "white",
-            width: newSize.width,
-            height: newSize.height,
+        // ✅ Small delay to let React process state
+        setTimeout(() => {
+          const newSize = {
+            width: template.size?.width || 800,
+            height: template.size?.height || 600
           };
-        }
 
-        //  Ensure objects array exists
-        if (!fabricJSON.objects || !Array.isArray(fabricJSON.objects)) {
-          fabricJSON.objects = [];
-        }
+          console.log('📐 New canvas size:', newSize);
+          setCanvasSize(newSize);
 
-        // Ensure dimensions
-        if (!fabricJSON.width) fabricJSON.width = newSize.width;
-        if (!fabricJSON.height) fabricJSON.height = newSize.height;
+          // ✅ CRITICAL: Clear references FIRST
+          setSelectedObject(null);
+          setContextMenu(null);
 
-        console.log(`Page ${i + 1}: ${fabricJSON.objects.length} objects`);
+          // ✅ Safe disposal with proper checks
+          const canvasArray = Array.from(canvases.entries());
 
-        loadedPages.push({
-          id: pg.id || uuidv4(),
-          name: pg.name || `Page ${i + 1}`,
-          fabricJSON: fabricJSON,
-          thumbnail: pg.thumbnail || null,
-          locked: !!pg.locked,
-        });
-      });
-    } else {
-      // No pages found - create blank page
-      console.warn(' No pages found, creating blank page');
-      loadedPages.push({
-        id: uuidv4(),
-        name: "Page 1",
-        fabricJSON: {
-          version: "5.3.0",
-          objects: [],
-          background: "white",
-          width: newSize.width,
-          height: newSize.height,
+          canvasArray.forEach(([pageId, canvas]) => {
+            try {
+              console.log(`🗑️ Disposing canvas: ${pageId}`);
+
+              // ✅ CRITICAL: Mark as disposing first
+              (canvas as any)._isDisposing = true;
+
+              // ✅ Stop pending renders
+              if ((canvas as any).cancelRequestedRender) {
+                (canvas as any).cancelRequestedRender();
+              }
+
+              // Check if already disposed - check ALL canvas elements
+              const isDisposed = !canvas.upperCanvasEl ||
+                !canvas.lowerCanvasEl ||
+                !canvas.wrapperEl;
+
+              if (isDisposed) {
+                console.log(`⏭️ Canvas ${pageId} already disposed`);
+                return;
+              }
+
+              // Discard selection
+              try {
+                canvas.discardActiveObject?.();
+              } catch (e) { }
+
+              // Remove listeners
+              try {
+                canvas.off?.();
+              } catch (e) { }
+
+              // Remove objects
+              try {
+                const objects = canvas.getObjects?.() || [];
+                objects.slice().forEach(obj => {
+                  try {
+                    if (canvas.upperCanvasEl) {
+                      canvas.remove(obj);
+                    }
+                  } catch (e) { }
+                });
+              } catch (e) { }
+
+              // Clear
+              try {
+                if (canvas.upperCanvasEl && canvas.clear) {
+                  canvas.clear();
+                }
+              } catch (e) { }
+
+              // ✅ Delay disposal
+              setTimeout(() => {
+                try {
+                  if (canvas.dispose && canvas.upperCanvasEl) {
+                    canvas.dispose();
+                    console.log(`✅ Canvas ${pageId} disposed`);
+                  }
+                } catch (e) { }
+              }, 50);
+
+            } catch (error) {
+              console.warn(`⚠️ Canvas disposal error for ${pageId}:`, error);
+            }
+          });
+
+          // ✅ Clear maps after starting all disposals
+          setTimeout(() => {
+            setCanvases(new Map());
+            setManagers(new Map());
+            console.log('✅ All canvas references cleared');
+          }, 100);
+          // ✅ Parse template pages
+          let templatePages = template.pages;
+
+          if (!templatePages && template.elements) {
+            console.log('🔄 Converting old format');
+            templatePages = [{
+              id: uuidv4(),
+              name: 'Page 1',
+              fabricJSON: template.elements,
+              thumbnail: template.thumbnail,
+              locked: false
+            }];
+          }
+
+          const loadedPages: PageItem[] = [];
+
+          if (templatePages && Array.isArray(templatePages) && templatePages.length > 0) {
+            templatePages.forEach((pg: any, i: number) => {
+              let fabricJSON = pg.fabricJSON || pg.json;
+
+              if (typeof fabricJSON === 'string') {
+                try {
+                  fabricJSON = JSON.parse(fabricJSON);
+                } catch (e) {
+                  console.error(`❌ Parse error page ${i}:`, e);
+                  fabricJSON = null;
+                }
+              }
+
+              if (!fabricJSON || typeof fabricJSON !== 'object') {
+                fabricJSON = {
+                  version: "5.3.0",
+                  objects: [],
+                  background: "white",
+                  width: newSize.width,
+                  height: newSize.height,
+                };
+              }
+
+              if (!fabricJSON.objects || !Array.isArray(fabricJSON.objects)) {
+                fabricJSON.objects = [];
+              }
+
+              // Restore SVG editability
+              if (fabricJSON.objects.length > 0) {
+                fabricJSON.objects.forEach((obj: any) => {
+                  if (obj.type === 'group' && obj.objects && Array.isArray(obj.objects)) {
+                    const pathObjects = obj.objects.filter((child: any) =>
+                      ['path', 'path-group', 'polygon', 'polyline'].includes(child.type)
+                    );
+
+                    if (pathObjects.length > 0) {
+                      obj.isEditableSVG = true;
+                      obj.svgPaths = pathObjects;
+
+                      pathObjects.forEach((path: any) => {
+                        path.isEditableSVG = true;
+                        path.svgPaths = pathObjects;
+                        if (path.editableFill) {
+                          path.fill = path.editableFill;
+                        }
+                      });
+                    }
+                  }
+                });
+              }
+
+              if (!fabricJSON.width) fabricJSON.width = newSize.width;
+              if (!fabricJSON.height) fabricJSON.height = newSize.height;
+
+              loadedPages.push({
+                id: pg.id || uuidv4(),
+                name: pg.name || `Page ${i + 1}`,
+                fabricJSON: fabricJSON,
+                thumbnail: pg.thumbnail || null,
+                locked: !!pg.locked,
+              });
+            });
+          } else {
+            loadedPages.push({
+              id: uuidv4(),
+              name: "Page 1",
+              fabricJSON: {
+                version: "5.3.0",
+                objects: [],
+                background: "white",
+                width: newSize.width,
+                height: newSize.height,
+              },
+              thumbnail: null,
+              locked: false,
+            });
+          }
+
+          console.log(`✅ Prepared ${loadedPages.length} pages`);
+
+          // ✅ Set new state with proper delay
+          // ✅ CRITICAL: Generate completely new page IDs to force React re-mount
+          const freshPages = loadedPages.map(pg => ({
+            ...pg,
+            id: `${pg.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` // Unique ID
+          }));
+
+          console.log(`✅ Prepared ${freshPages.length} pages with fresh IDs`);
+
+          setTimeout(() => {
+            // ✅ Set fresh pages with unique IDs
+            setPages(freshPages);
+            setActivePageIndex(0);
+            setActivePageId(freshPages[0]?.id || null);
+            setBaseAdminTemplateId(template.createdBy && !template.userId ? template.id : null);
+            setCurrentTemplateId(template.userId ? template.id : null);
+            setTemplateName(template.name || "");
+            setIsEditingTemplate(!!template.userId);
+            setActiveCategory(null);
+
+            console.log('✅ Pages state updated with fresh IDs');
+
+            setSnackbar({
+              open: true,
+              message: `Template "${template.name}" loaded`,
+              severity: "success"
+            });
+
+            // ✅ Wait longer for all pages to fully mount and render
+            setTimeout(() => {
+              setIsLoadingProject(false);
+              console.log('✅ Template loading complete');
+
+              // ✅ Force render on all canvases after load complete
+              setTimeout(() => {
+                canvases.forEach((canvas, pageId) => {
+                  if (canvas && canvas.requestRenderAll) {
+                    console.log(`🎨 Force rendering canvas: ${pageId}`);
+                    canvas.requestRenderAll();
+                  }
+                });
+                console.log('🎨 All canvases force rendered');
+              }, 500);
+
+            }, 800);
+          }, 250);
+        }, 150);
+
+        return;
+      } else {
+        setAction({ type: "ADD_SHAPE", payload });
+      }
+    },
+    onDelete: () => {
+      if (!canvasInstance) return;
+      const active = canvasInstance.getActiveObject();
+      if (active) {
+        canvasInstance.remove(active); // Tracked by CommandManager via object:removed
+        canvasInstance.requestRenderAll();
+      }
+    },
+    onUndo: () => { if (manager) manager.undo(); },
+    onRedo: () => { if (manager) manager.redo(); },
+    onClear: () => {
+      if (!canvasInstance || !manager) return;
+      const prevJSON = canvasInstance.toJSON();
+      manager.execute({
+        do: () => {
+          // Remove all objects without disposing the canvas
+          const objs = canvasInstance.getObjects().slice();
+          objs.forEach(o => canvasInstance.remove(o));
+          canvasInstance.discardActiveObject();
+          canvasInstance.requestRenderAll();
         },
-        thumbnail: null,
-        locked: false,
+        undo: () => {
+          canvasInstance.loadFromJSON(prevJSON, () => {
+            canvasInstance.requestRenderAll();
+          });
+        }
       });
-    }
-
-    console.log(` Loaded ${loadedPages.length} pages`);
-
-    // Wait for cleanup, then set pages
-    setTimeout(() => {
-      setPages(loadedPages);
-      setActivePageIndex(0);
-      setActivePageId(loadedPages[0]?.id || null);
-      setBaseAdminTemplateId(template.createdBy && !template.userId ? template.id : null);
-      setCurrentTemplateId(template.userId ? template.id : null);
-      setTemplateName(template.name || "");
-      setIsEditingTemplate(!!template.userId);
-      setActiveCategory(null);
-
-      console.log('Template loaded successfully');
-
-      setSnackbar({
-        open: true,
-        message: `Template "${template.name}" loaded`,
-        severity: "success"
-      });
-
-      // Clear loading state after render
-      setTimeout(() => {
-        setIsLoadingProject(false);
-        console.log('Loading complete');
-      }, 1000);
-    }, 100);
-
-    return;
-  } else {
-    setAction({ type: "ADD_SHAPE", payload });
-  }
-},
-
-    onDelete: () => setAction({ type: "DELETE" }),
-    onUndo: () => setAction({ type: "UNDO" }),
-    onRedo: () => setAction({ type: "REDO" }),
-    onClear: () => setAction({ type: "CLEAR" }),
+    },
     onBringForward: () => setAction({ type: "BRING_FORWARD" }),
     onSendBackward: () => setAction({ type: "SEND_BACKWARD" }),
     onBringToFront: () => setAction({ type: "BRING_TO_FRONT" }),
@@ -1440,23 +2311,24 @@ const handleAddPage = () => {
     if (!canvasInstance || !manager || !selectedObject) return;
 
     const isEditableSVG = (selectedObject as any).isEditableSVG;
-    console.log('handleColorChange Called:', {
+
+    console.log('🎨 handleColorChange Called:', {
       type,
-      color: typeof color === 'object' ? color.type : color,
+      colorType: typeof color === 'object' ? (color.type || 'hex') : 'string',
       isEditableSVG,
-      selectedObjectType: selectedObject.type
+      selectedObjectType: selectedObject.type,
+      color: typeof color === 'object' ? color : color
     });
 
-    // ========== SVG COLOR CHANGE ==========
-    if (isEditableSVG && type === 'fill') {
-      const newColor = typeof color === 'object' ? (color.hex || color) : color;
-      const oldColor = colorPickerColor;
+    // ========== SVG GRADIENT APPLICATION ==========
+    if (isEditableSVG && type === 'fill' && typeof color === 'object' && color.type) {
       const svgPaths = (selectedObject as any).svgPaths || [];
+      const oldColor = colorPickerColor;
 
-      console.log('SVG Color Update:', {
-        oldColor,
-        newColor,
-        pathCount: svgPaths.length
+      console.log('🌈 SVG Gradient Apply:', {
+        pathCount: svgPaths.length,
+        gradientType: color.type,
+        colorStops: color.colorStops
       });
 
       if (!svgPaths || svgPaths.length === 0) {
@@ -1464,40 +2336,64 @@ const handleAddPage = () => {
         return;
       }
 
-      // Execute with undo/redo
+      // Get SVG GROUP dimensions (not individual paths)
+      const group = selectedObject as fabric.Group;
+      const groupWidth = (group.width || 100) * (group.scaleX || 1);
+      const groupHeight = (group.height || 100) * (group.scaleY || 1);
+
+      console.log('SVG Group Dimensions:', { groupWidth, groupHeight });
+
       manager.execute({
         do: () => {
-          let changedCount = 0;
-          let debugLog: string[] = [];
-
           svgPaths.forEach((path: any, idx: number) => {
-            const pathFill = path.fill;
-            const pathFillStr = String(pathFill).toLowerCase();
-            const oldColorStr = String(oldColor).toLowerCase();
+            try {
+              // Create gradient with GROUP coordinates
+              const gradient = new fabric.Gradient({
+                type: color.type || 'linear',
+                coords: color.type === 'radial'
+                  ? {
+                    x1: groupWidth / 2,
+                    y1: groupHeight / 2,
+                    x2: groupWidth / 2,
+                    y2: groupHeight / 2,
+                    r1: 0,
+                    r2: Math.min(groupWidth, groupHeight) / 2
+                  }
+                  : {
+                    x1: 0,
+                    y1: 0,
+                    x2: groupWidth,
+                    y2: 0
+                  },
+                colorStops: color.colorStops || [
+                  { offset: 0, color: '#ff9a9e' },
+                  { offset: 1, color: '#fecfef' }
+                ],
+                //  CRITICAL: Correct positioning
+                offsetX: -groupWidth / 2,
+                offsetY: -groupHeight / 2
+              });
 
-            // Flexible color matching
-            const isMatch =
-              pathFillStr === oldColorStr ||
-              pathFillStr.replace(/#/g, '') === oldColorStr.replace(/#/g, '');
+              path.set('fill', gradient);
+              (path as any).editableFill = 'gradient';
 
-            if (isMatch) {
-              path.set('fill', newColor);
-              (path as any).editableFill = newColor;
-              changedCount++;
-              debugLog.push(`Path ${idx}: ${pathFill} -> ${newColor}`);
-            } else {
-              debugLog.push(`Path ${idx}: ${pathFill} (no match)`);
+              console.log(` Path ${idx} gradient applied`);
+            } catch (err) {
+              console.error(` Path ${idx} gradient failed:`, err);
             }
           });
 
-          console.log('SVG Update Results:', debugLog);
-          console.log(`Total paths changed: ${changedCount}`);
-
           canvasInstance.requestRenderAll();
+
+          setSnackbar({
+            open: true,
+            message: 'Gradient applied to SVG',
+            severity: 'success'
+          });
         },
         undo: () => {
           svgPaths.forEach((path: any) => {
-            if (path.fill === newColor || String(path.fill).toLowerCase() === String(newColor).toLowerCase()) {
+            if ((path as any).editableFill === 'gradient') {
               path.set('fill', oldColor);
               (path as any).editableFill = oldColor;
             }
@@ -1509,7 +2405,255 @@ const handleAddPage = () => {
       return;
     }
 
-    // ========== GRADIENT FILL ==========
+    // ========== SVG SOLID COLOR CHANGE ==========
+    // if (isEditableSVG && type === 'fill') {
+    //   const svgPaths = (selectedObject as any).svgPaths || [];
+
+    //   console.log('🖌️ SVG Solid Color Update:', {
+    //     oldColor: colorPickerColor,
+    //     newColor: typeof color === 'object' ? color.hex : color,
+    //     pathCount: svgPaths.length
+    //   });
+
+    //   if (!svgPaths || svgPaths.length === 0) {
+    //     console.error('❌ No SVG paths found');
+    //     return;
+    //   }
+
+    //   // ✅ SAFE COLOR NORMALIZATION
+    //   const normalizeColor = (c: any): string => {
+    //     if (!c) return '';
+    //     if (typeof c === 'string') {
+    //       return c.toLowerCase().replace(/\s/g, '').replace(/#/g, '');
+    //     }
+    //     if (typeof c === 'object' && c.type) {
+    //       return 'gradient';
+    //     }
+    //     return String(c).toLowerCase().replace(/\s/g, '').replace(/#/g, '');
+    //   };
+
+    //   const newColor = typeof color === 'object' ? (color.hex || color) : color;
+    //   const oldColor = colorPickerColor;
+
+    //   manager.execute({
+    //     do: () => {
+    //       let changedCount = 0;
+    //       const oldNorm = normalizeColor(oldColor);
+
+    //       svgPaths.forEach((path: any, idx: number) => {
+    //         const pathFill = path.fill;
+    //         const pathNorm = normalizeColor(pathFill);
+
+    //         // ✅ Match with normalized colors
+    //         if (pathNorm === oldNorm) {
+    //           path.set('fill', newColor);
+    //           (path as any).editableFill = newColor;
+    //           changedCount++;
+    //           console.log(`✅ Changed path ${idx}: ${pathFill} → ${newColor}`);
+    //         }
+    //       });
+
+    //       console.log(`✅ Total paths changed: ${changedCount}`);
+
+    //       // ✅ Update color picker state
+    //       setColorPickerColor(newColor);
+
+    //       canvasInstance.requestRenderAll();
+    //     },
+    //     undo: () => {
+    //       const newNorm = normalizeColor(newColor);
+
+    //       svgPaths.forEach((path: any) => {
+    //         const pathNorm = normalizeColor(path.fill);
+    //         if (pathNorm === newNorm) {
+    //           path.set('fill', oldColor);
+    //           (path as any).editableFill = oldColor;
+    //         }
+    //       });
+
+    //       setColorPickerColor(oldColor);
+    //       canvasInstance.requestRenderAll();
+    //     }
+    //   });
+
+    //   return;
+    // }
+
+
+    // FIXED: SVG Color Change with editableFill tracking
+    if (isEditableSVG && type === 'fill') {
+      const svgPaths = (selectedObject as any).svgPaths || [];
+
+      console.log('Canva-style SVG Color Change:', {
+        oldColor: colorPickerColor,
+        newColor: typeof color === 'object' ? color.hex : color,
+        totalPaths: svgPaths.length
+      });
+
+      if (!svgPaths || svgPaths.length === 0) {
+        console.error('No SVG paths found');
+        return;
+      }
+
+      const newColor = typeof color === 'object' ? (color.hex || color) : color;
+
+      // ENHANCED: Color normalization with RGB support
+      const normalizeColor = (c: any): string => {
+        if (!c) return '';
+
+        let colorStr = '';
+        if (typeof c === 'string') {
+          colorStr = c;
+        } else if (typeof c === 'object' && c.hex) {
+          colorStr = c.hex;
+        } else {
+          colorStr = String(c);
+        }
+
+        // Handle rgb/rgba format
+        if (colorStr.startsWith('rgb')) {
+          const matches = colorStr.match(/\d+/g);
+          if (matches && matches.length >= 3) {
+            const r = parseInt(matches[0]).toString(16).padStart(2, '0');
+            const g = parseInt(matches[1]).toString(16).padStart(2, '0');
+            const b = parseInt(matches[2]).toString(16).padStart(2, '0');
+            return `${r}${g}${b}`.toLowerCase();
+          }
+        }
+
+        return colorStr.toLowerCase().replace(/\s/g, '').replace(/#/g, '');
+      };
+
+      const oldColorNorm = normalizeColor(colorPickerColor);
+      const pathsToChange: any[] = [];
+
+      console.log(` Finding ALL elements with color: ${colorPickerColor} → ${oldColorNorm}`);
+
+      // CRITICAL: Check ALL paths and collect matches
+      for (let i = 0; i < svgPaths.length; i++) {
+        const path = svgPaths[i];
+
+        if (path && typeof path.set === 'function') {
+          const pathEditableColor = (path as any).editableFill;
+          const pathFillColor = path.fill;
+
+          const editableNorm = normalizeColor(pathEditableColor);
+          const fillNorm = normalizeColor(pathFillColor);
+
+          console.log(`  Path ${i}:`, {
+            editableFill: pathEditableColor,
+            fill: pathFillColor,
+            editableNorm,
+            fillNorm,
+            targetNorm: oldColorNorm
+          });
+
+          // Match against EITHER editableFill OR fill (handles saved templates)
+          if (editableNorm === oldColorNorm || fillNorm === oldColorNorm) {
+            pathsToChange.push({
+              path: path,
+              index: i,
+              oldColor: pathEditableColor || pathFillColor
+            });
+            console.log(`MATCH! Path ${i}`);
+          } else {
+            console.log(`Skip path ${i}`);
+          }
+        }
+      }
+
+      if (pathsToChange.length === 0) {
+        console.warn('No paths with matching color');
+
+        const availableColors = [...new Set(
+          svgPaths
+            .map((p: any) => (p as any).editableFill || p.fill)
+            .filter((c: any) => c && c !== 'none' && c !== 'transparent')
+        )].slice(0, 5);
+
+        console.log('Available colors:', availableColors);
+
+        setSnackbar({
+          open: true,
+          message: `No elements with ${colorPickerColor}. Found: ${availableColors.join(', ')}`,
+          severity: 'info'
+        });
+        return;
+      }
+
+      console.log(`Found ${pathsToChange.length}/${svgPaths.length} matching paths`);
+
+      // Store old state with full info
+      const oldPathData: any[] = pathsToChange.map((item: any) => ({
+        path: item.path,
+        fill: item.path.fill,
+        editableFill: (item.path as any).editableFill,
+        index: item.index
+      }));
+
+      manager.execute({
+        do: () => {
+          let successCount = 0;
+
+          pathsToChange.forEach((item: any) => {
+            try {
+              item.path.set({ fill: newColor });
+              (item.path as any).editableFill = newColor;
+              successCount++;
+              console.log(`   Changed path ${item.index}: ${item.oldColor} → ${newColor}`);
+            } catch (err) {
+              console.error(`   Path ${item.index} error:`, err);
+            }
+          });
+
+          setColorPickerColor(newColor);
+          (selectedObject as any).dirty = true;
+          canvasInstance.requestRenderAll();
+
+          setSnackbar({
+            open: true,
+            message: `✅ Changed ${successCount} element(s): ${colorPickerColor} → ${newColor}`,
+            severity: 'success'
+          });
+
+          console.log(`🎉 Color change complete: ${successCount}/${pathsToChange.length} updated`);
+        },
+
+        undo: () => {
+          let undoCount = 0;
+
+          oldPathData.forEach((data: any) => {
+            try {
+              data.path.set({ fill: data.fill });
+              (data.path as any).editableFill = data.editableFill;
+              undoCount++;
+            } catch (err) {
+              console.error(' Undo error:', err);
+            }
+          });
+
+          if (oldPathData.length > 0) {
+            const restoredColor = oldPathData[0].editableFill || oldPathData[0].fill;
+            setColorPickerColor(restoredColor);
+          }
+
+          (selectedObject as any).dirty = true;
+          canvasInstance.requestRenderAll();
+
+          setSnackbar({
+            open: true,
+            message: `↩️ Restored ${undoCount} element(s)`,
+            severity: 'info'
+          });
+
+          console.log(`↩️ Undo complete: ${undoCount} elements restored`);
+        }
+      });
+
+      return;
+    }
+
+    // ========== REGULAR SHAPES - GRADIENT ==========
     if (typeof color === 'object' && color.type && type === 'fill' && !isEditableSVG) {
       const objWidth = (selectedObject?.width ?? 100) * (selectedObject?.scaleX ?? 1);
       const objHeight = (selectedObject?.height ?? 100) * (selectedObject?.scaleY ?? 1);
@@ -1534,20 +2678,28 @@ const handleAddPage = () => {
 
       const oldFill = (selectedObject as any).fill;
 
+      console.log('Regular Shape Gradient:', {
+        objWidth,
+        objHeight,
+        gradientType: color.type
+      });
+
       manager.execute({
         do: () => {
           (selectedObject as any).set('fill', gradient);
+          (selectedObject as any).set('dirty', true);
           canvasInstance.requestRenderAll();
         },
         undo: () => {
           (selectedObject as any).set('fill', oldFill);
+          (selectedObject as any).set('dirty', true);
           canvasInstance.requestRenderAll();
         }
       });
       return;
     }
 
-    // ========== SOLID COLORS ==========
+    // ========== SOLID COLORS (Non-SVG) ==========
     const newColor = typeof color === 'object' ? (color.hex || color) : color;
 
     if (type === 'shadow') {
@@ -1573,20 +2725,104 @@ const handleAddPage = () => {
         }
       });
     } else {
-      const oldColor = (selectedObject as any)[type];
+      // Handle gradient → solid color conversion
+      const oldFill = (selectedObject as any)[type];
+      const isCurrentlyGradient = oldFill && typeof oldFill === 'object' && oldFill.type;
+
+      console.log('🎨 Solid Color Apply:', {
+        type,
+        newColor,
+        wasGradient: isCurrentlyGradient
+      });
 
       manager.execute({
         do: () => {
           (selectedObject as any).set(type, newColor);
+
+          if (isCurrentlyGradient) {
+            (selectedObject as any).set('dirty', true);
+          }
+
           canvasInstance.requestRenderAll();
         },
         undo: () => {
-          (selectedObject as any).set(type, oldColor);
+          (selectedObject as any).set(type, oldFill);
+
+          if (isCurrentlyGradient) {
+            (selectedObject as any).set('dirty', true);
+          }
+
           canvasInstance.requestRenderAll();
         }
       });
     }
   };
+
+
+  //  Page Background Handler - NEW
+  const handlePageBackgroundChange = (color: string | any) => {
+    if (!currentPageForBg) return;
+
+    const canvas = canvases.get(currentPageForBg);
+    if (!canvas) return;
+
+    console.log('Changing page background:', {
+      pageId: currentPageForBg,
+      colorType: typeof color
+    });
+
+    // Handle gradient
+    if (typeof color === 'object' && color.type) {
+      const canvasWidth = canvas.width || 800;
+      const canvasHeight = canvas.height || 600;
+
+      const gradient = new fabric.Gradient({
+        type: color.type || 'linear',
+        coords: color.type === 'radial'
+          ? {
+            x1: canvasWidth / 2,
+            y1: canvasHeight / 2,
+            x2: canvasWidth / 2,
+            y2: canvasHeight / 2,
+            r1: 0,
+            r2: Math.min(canvasWidth, canvasHeight) / 2
+          }
+          : { x1: 0, y1: 0, x2: canvasWidth, y2: 0 },
+        colorStops: color.colorStops || [
+          { offset: 0, color: '#ff9a9e' },
+          { offset: 1, color: '#fecfef' }
+        ]
+      });
+
+      canvas.backgroundColor = gradient;
+      console.log('Applied gradient background');
+    } else {
+      // Solid color
+      const solidColor = typeof color === 'object' ? (color.hex || color) : color;
+      canvas.backgroundColor = solidColor;
+      console.log('Applied solid background:', solidColor);
+    }
+
+    canvas.requestRenderAll();
+
+    // Update pages state
+    setPages((prev) =>
+      prev.map((p) =>
+        p.id === currentPageForBg
+          ? { ...p, fabricJSON: canvas.toJSON() }
+          : p
+      )
+    );
+  };
+
+  // Get Current Page Background - NEW
+  const getCurrentPageBackground = () => {
+    if (!currentPageForBg) return 'white';
+    const canvas = canvases.get(currentPageForBg);
+    return canvas?.backgroundColor || 'white';
+  };
+
+
   const playAnimation = (obj: fabric.Object, animationId: string, speed: number) => {
     if (!canvasInstance) return;
 
@@ -1994,7 +3230,7 @@ const handleAddPage = () => {
 
   };
   return (
-    <Box sx={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+    <Box sx={{ height: "100vh", display: "flex", flexDirection: "column", backgroundColor: "#f5f3ff" }}>
       <CanvaHeader position="fixed">
         <Toolbar sx={{ justifyContent: "space-between" }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
@@ -2302,18 +3538,18 @@ const handleAddPage = () => {
 
       <PropertiesPanelWrapper>{renderPropertyPanel()}</PropertiesPanelWrapper>
       <Box sx={{ display: "flex", flex: 1, overflow: "hidden" }}>
-       <Sidebar
-  {...sidebarHandlers}
-  onSelectProject={(projectData: any) => {
-    console.log('Sidebar project selected:', projectData.name);
-    
-    //  Bas ek line!
-    handlers.onAddShape({
-      type: "LOAD_TEMPLATE",
-      template: projectData
-    });
-  }}
-/>
+        <Sidebar
+          {...sidebarHandlers}
+          onSelectProject={(projectData: any) => {
+            console.log('Sidebar project selected:', projectData.name);
+
+            //  Bas ek line!
+            handlers.onAddShape({
+              type: "LOAD_TEMPLATE",
+              template: projectData
+            });
+          }}
+        />
 
         <Box sx={{
           display: "flex",
@@ -2323,10 +3559,10 @@ const handleAddPage = () => {
           gap: 3,
           py: 3,
           px: 2,
-          height: "calc(100vh - 64px)", 
+          height: "calc(100vh - 64px)",
           overflowY: "auto",
           overflowX: "hidden",
-          backgroundColor: "#f5f5f5"
+          backgroundColor: "#faf9fc"
         }}>
           {pages.map((page, index) => (
             <PageCanvas
@@ -2348,7 +3584,7 @@ const handleAddPage = () => {
               onSetActive={() => {
                 setActivePageIndex(index);
                 setActivePageId(page.id);
-                console.log(`📍 Active page: ${index + 1}`);
+                console.log(` Active page: ${index + 1}`);
               }}
             />
           ))}
@@ -2363,8 +3599,8 @@ const handleAddPage = () => {
               handleAddPage();
             }}
             sx={{
-              borderColor: "#7c3aed",
-              color: "#7c3aed",
+              borderColor: "#8b5cf6", 
+              color: "#8b5cf6",
               borderWidth: 2,
               borderStyle: "dashed",
               py: 2,
@@ -2372,9 +3608,10 @@ const handleAddPage = () => {
               mt: 2,
               fontSize: "16px",
               fontWeight: 600,
+              backgroundColor: "rgba(139, 92, 246, 0.05)", 
               "&:hover": {
-                borderColor: "#6d28d9",
-                backgroundColor: "rgba(124, 58, 237, 0.05)",
+                borderColor: "#7c3aed", 
+                backgroundColor: "rgba(139, 92, 246, 0.1)",
                 borderWidth: 2
               }
             }}
@@ -2516,13 +3753,13 @@ const handleAddPage = () => {
         </Menu>
 
 
-        {/* ColorPicker - Fixed on Right Side */}
-        {/* ColorPicker - Fixed on Right Side */}
+
         <ColorPicker
           isOpen={colorPickerOpen}
           onClose={() => {
             setColorPickerOpen(false);
             setColorPickerType(null);
+            setCurrentPageForBg(null);
           }}
           currentColor={colorPickerColor}
           onColorChange={(color) => {
@@ -2537,7 +3774,13 @@ const handleAddPage = () => {
                 'Shadow Colour'
           }
           allowGradients={colorPickerType === 'fill'}
+
+          // NEW PROPS for Page Background:
+          showPageBackgroundOption={true}
+          currentPageBackground={getCurrentPageBackground()}
+          onPageBackgroundChange={handlePageBackgroundChange}
         />
+
         {/* My Projects Panel */}
         {activeCategory === "myprojects" && (
           <Box sx={{ width: 320, minWidth: 320, borderLeft: "1px solid #ddd" }}>
@@ -2545,7 +3788,7 @@ const handleAddPage = () => {
               onSelectProject={(projectData: any) => {
                 console.log(' Project selected:', projectData.name);
 
-                //  Simple - handlers.onAddShape use karo
+                //  Simple - handlers.onAddShape use 
                 handlers.onAddShape({
                   type: "LOAD_TEMPLATE",
                   template: projectData

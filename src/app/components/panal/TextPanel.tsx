@@ -145,7 +145,7 @@ const TextPanel: React.FC<TextPanelProps> = ({ onAddText, onClose, canvas }) => 
           `https://www.googleapis.com/webfonts/v1/webfonts?key=${apiKey}&sort=popularity`
         );
         const data = await response.json();
-        setFonts(data.items.slice(0, 100)); // Top 100 popular fonts
+        setFonts(data.items.slice(0, 100)); 
       } catch (error) {
         console.error("Error fetching fonts:", error);
       } finally {

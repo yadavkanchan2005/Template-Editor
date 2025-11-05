@@ -11,6 +11,8 @@ import {
   InputAdornment,
   Tabs,
   Tab,
+  FormControlLabel,
+  Switch,
 } from "@mui/material";
 import { styled } from "@mui/material/styles";
 import { ChromePicker } from "react-color";
@@ -221,6 +223,10 @@ interface ColorPickerProps {
   onColorChange: (color: string | any) => void;
   title?: string;
   allowGradients?: boolean;
+    showPageBackgroundOption?: boolean;
+  currentPageBackground?: string | any;
+  onPageBackgroundChange?: (color: string | any) => void;
+    documentColors?: string[]; 
 }
 
 const ColorPicker: React.FC<ColorPickerProps> = ({
@@ -230,6 +236,10 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
   onColorChange,
   title = "Color",
   allowGradients = true,
+    showPageBackgroundOption = false,
+  currentPageBackground = 'white',
+  onPageBackgroundChange,
+    documentColors = [],
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedColor, setSelectedColor] = useState(currentColor);
@@ -243,21 +253,30 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
   const [gradientColor2, setGradientColor2] = useState("#fecfef");
   const [gradientAngle, setGradientAngle] = useState(135);
   const [selectedGradient, setSelectedGradient] = useState<string | null>(null);
-  
 
-  useEffect(() => {
+    const [isPageBackgroundMode, setIsPageBackgroundMode] = useState(false);
+  
+ useEffect(() => {
     setSelectedColor(currentColor);
-    // Load recent colors from localStorage
     const saved = localStorage.getItem("recentColors");
     if (saved) {
       setRecentColors(JSON.parse(saved));
     }
-      }, [currentColor, isOpen]);
-        const handleColorSelect = (color: string) => {
-            console.log("🎨 [ColorPicker] Selected color:", color);
-    setSelectedColor(color);
-    onColorChange(color);
-     // Add to recent colors
+  }, [currentColor, isOpen]);
+
+  const handleColorSelect = (color: string) => {
+    console.log("🎨 [ColorPicker] Selected color:", color, "Mode:", isPageBackgroundMode ? "Page BG" : "Object");
+    
+    if (isPageBackgroundMode && onPageBackgroundChange) {
+      // Apply to page background
+      onPageBackgroundChange(color);
+    } else {
+      // Apply to selected object
+      setSelectedColor(color);
+      onColorChange(color);
+    }
+    
+    // Add to recent colors
     const updated = [color, ...recentColors.filter(c => c !== color)].slice(0, 14);
     setRecentColors(updated);
     localStorage.setItem("recentColors", JSON.stringify(updated));
@@ -269,7 +288,6 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
     setGradientColor2(gradient.colors[1]);
     setGradientAngle(gradient.angle);
 
-    // Create fabric.js gradient object
     const gradientObj = {
       type: "linear",
       angle: gradient.angle,
@@ -279,7 +297,12 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
       ],
       background: gradient.background,
     };
-    onColorChange(gradientObj);
+    
+    if (isPageBackgroundMode && onPageBackgroundChange) {
+      onPageBackgroundChange(gradientObj);
+    } else {
+      onColorChange(gradientObj);
+    }
   };
 
   const handleCustomGradient = () => {
@@ -292,7 +315,12 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
       ],
       background: `linear-gradient(${gradientAngle}deg, ${gradientColor1} 0%, ${gradientColor2} 100%)`,
     };
-    onColorChange(gradientObj);
+    
+    if (isPageBackgroundMode && onPageBackgroundChange) {
+      onPageBackgroundChange(gradientObj);
+    } else {
+      onColorChange(gradientObj);
+    }
   };
 
   const handleAddBrandColor = () => {
@@ -301,15 +329,14 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
       setBrandColors(updated);
       localStorage.setItem("brandColors", JSON.stringify(updated));
     }
-    };
+  };
 
   const filteredColors = SOLID_COLORS.filter(color =>
     searchQuery ? color.toLowerCase().includes(searchQuery.toLowerCase()) : true
   );
 
   if (!isOpen) return null;
-
-  return (
+ return (
     <ColorPickerPanel className="color-picker-panel">
       <PanelHeader>
         <Typography variant="h6" sx={{ fontSize: 16, fontWeight: 600 }}>
@@ -321,6 +348,48 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
       </PanelHeader>
 
       <PanelContent>
+        {/* ✅ NEW: Page Background Toggle */}
+        {showPageBackgroundOption && (
+          <Box sx={{ 
+            mb: 2, 
+            p: 2, 
+            backgroundColor: '#f9fafb', 
+            borderRadius: 2,
+            border: '2px solid',
+            borderColor: isPageBackgroundMode ? '#7c3aed' : '#e5e7eb',
+            transition: 'all 0.2s'
+          }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={isPageBackgroundMode}
+                  onChange={(e) => setIsPageBackgroundMode(e.target.checked)}
+                  sx={{
+                    '& .MuiSwitch-switchBase.Mui-checked': {
+                      color: '#7c3aed',
+                    },
+                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                      backgroundColor: '#7c3aed',
+                    },
+                  }}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151' }}>
+                    {isPageBackgroundMode ? '📄 Page Background Mode' : '🎨 Object Color Mode'}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: '#6b7280' }}>
+                    {isPageBackgroundMode 
+                      ? 'Colors will be applied to page background' 
+                      : 'Colors will be applied to selected object'}
+                  </Typography>
+                </Box>
+              }
+            />
+          </Box>
+        )}
+
         {/* Search */}
         <SearchInput
           fullWidth
@@ -563,6 +632,4 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
   );
 };
 
-
 export default ColorPicker;
-

@@ -187,33 +187,53 @@ const [isSVG, setIsSVG] = useState(false);
 
 
 
-
-
-  useEffect(() => {
+useEffect(() => {
   if (!selectedObject) {
     setSvgColors([]);
     setIsSVG(false);
     return;
   }
 
+  // ✅ FORCE SVG DETECTION on every selection change
+  const ensureEditableSVGFromGroup = () => {
+    const anySel: any = selectedObject as any;
+    const grp: any = anySel?.group;
+    if (grp && Array.isArray(grp._objects)) {
+      const isPathLike = (o: any) => ['path','path-group','polygon','polyline','object'].includes(o?.type);
+      const pathChildren = grp._objects.filter((c: any) => isPathLike(c));
+      if (pathChildren.length) {
+        grp.isEditableSVG = true;
+        grp.svgPaths = pathChildren;
+        pathChildren.forEach((child: any) => {
+          child.isEditableSVG = true;
+          child.svgPaths = pathChildren;
+        });
+        anySel.isEditableSVG = true;
+        anySel.svgPaths = pathChildren;
+        return true;
+      }
+    }
+    return false;
+  };
 
-  // Check if it's an editable SVG group
+  // ✅ ALWAYS check for SVG, even if flag exists
+  ensureEditableSVGFromGroup();
+
+  // ✅ RE-DETECT SVG colors on EVERY selection
   if ((selectedObject as any).isEditableSVG) {
     setIsSVG(true);
     const paths = (selectedObject as any).svgPaths || [];
-    
-    // Extract unique colors from SVG paths
+
     const colorMap = new Map<string, number>();
     paths.forEach((path: any, index: number) => {
-      const fill = path.fill;
-      if (fill && typeof fill === 'string' && fill !== 'none') {
-        if (!colorMap.has(fill)) {
-          colorMap.set(fill, index);
+      const candidate = (path as any).editableFill || path.fill || path.stroke;
+      if (candidate && typeof candidate === 'string' && candidate !== 'none') {
+        if (!colorMap.has(candidate)) {
+          colorMap.set(candidate, index);
         }
       }
     });
 
-    // Convert to array
     const colors = Array.from(colorMap.entries()).map(([color, index], i) => ({
       index,
       color,
@@ -221,10 +241,16 @@ const [isSVG, setIsSVG] = useState(false);
     }));
 
     setSvgColors(colors);
+    
+    // ✅ AUTO-SELECT first color when new SVG selected
+    if (colors.length > 0 && colorPickerColor !== colors[0].color) {
+      setColorPickerColor(colors[0].color);
+    }
   } else {
     setIsSVG(false);
     setSvgColors([]);
   }
+
     const shadow = selectedObject.shadow as fabric.Shadow | undefined;
     let width = (selectedObject.width ?? 0) * (selectedObject.scaleX ?? 1);
     let height = (selectedObject.height ?? 0) * (selectedObject.scaleY ?? 1);
@@ -357,65 +383,180 @@ const [isSVG, setIsSVG] = useState(false);
   };
   
 // ---------------- SVG Color Change ----------------
-  const handleColorChange = (color: string | any) => {
-    if (!colorPickerType || !selectedObject) return;
+  // const handleColorChange = (color: string | any) => {
+  //   if (!colorPickerType || !selectedObject) return;
     
-    const newColor = typeof color === 'object' ? (color.hex || color) : color;
-    console.log('Color Change:', { colorPickerType, isSVG, oldColor: colorPickerColor, newColor });
+  //   const newColor = typeof color === 'object' ? (color.hex || color) : color;
+  //   console.log('Color Change:', { colorPickerType, isSVG, oldColor: colorPickerColor, newColor });
 
-    // SVG color change - check both 'fill' and 'svgFill'
-    if (isSVG && (colorPickerType === 'fill' || colorPickerType === 'svgFill')) {
-      const paths = (selectedObject as any).svgPaths || [];
-      const oldColor = colorPickerColor;
+  //   // SVG color change - check both 'fill' and 'svgFill'
+  //   if (isSVG && (colorPickerType === 'fill' || colorPickerType === 'svgFill')) {
+  //     const paths = (selectedObject as any).svgPaths || [];
+  //     const oldColor = colorPickerColor;
 
-      console.log('SVG Paths:', paths.length, 'Old Color:', oldColor);
+  //     console.log('SVG Paths:', paths.length, 'Old Color:', oldColor);
 
+  //     if (manager && canvas) {
+  //       manager.execute({
+  //         do: () => {
+  //           let changedCount = 0;
+  //           paths.forEach((p: any) => {
+  //             const currentFill = p.fill;
+  //             console.log('Checking path:', currentFill, 'vs', oldColor);
+              
+  //             // Flexible color matching (case-insensitive, with/without #)
+  //             if (
+  //               currentFill === oldColor ||
+  //               currentFill?.toLowerCase() === oldColor?.toLowerCase() ||
+  //               currentFill?.replace('#', '') === oldColor?.replace('#', '')
+  //             ) {
+  //               p.set('fill', newColor);
+  //               (p as any).editableFill = newColor;
+  //               changedCount++;
+  //               console.log('Changed path color to:', newColor);
+  //             }
+  //           });
+            
+  //           console.log('Total paths changed:', changedCount);
+  //           setSvgColors(prev => prev.map(c => 
+  //             c.color === oldColor || c.color?.toLowerCase() === oldColor?.toLowerCase()
+  //               ? { ...c, color: newColor } 
+  //               : c
+  //           ));
+  //           setPropsState((prev: any) => ({ ...prev, fill: newColor }));
+  //           canvas.requestRenderAll();
+  //         },
+  //         undo: () => {
+  //           paths.forEach((p: any) => {
+  //             if (
+  //               p.fill === newColor ||
+  //               p.fill?.toLowerCase() === newColor?.toLowerCase()
+  //             ) {
+  //               p.set('fill', oldColor);
+  //               (p as any).editableFill = oldColor;
+  //             }
+  //           });
+  //           setSvgColors(prev => prev.map(c => 
+  //             c.color === newColor || c.color?.toLowerCase() === newColor?.toLowerCase()
+  //               ? { ...c, color: oldColor } 
+  //               : c
+  //           ));
+  //           setPropsState((prev: any) => ({ ...prev, fill: oldColor }));
+  //           canvas.requestRenderAll();
+  //         }
+  //       });
+  //     }
+  //     return;
+  //   }
+
+  //   // Regular color / gradient (non-SVG objects)
+  //   if (typeof color === 'object' && color.type) {
+  //     if (colorPickerType === 'fill') {
+  //       const objWidth = (selectedObject?.width ?? 100) * (selectedObject?.scaleX ?? 1);
+  //       const objHeight = (selectedObject?.height ?? 100) * (selectedObject?.scaleY ?? 1);
+  //       const gradient = new fabric.Gradient({
+  //         type: color.type || 'linear',
+  //         coords: color.type === 'radial'
+  //           ? { x1: objWidth / 2, y1: objHeight / 2, x2: objWidth / 2, y2: objHeight / 2, r1: 0, r2: Math.min(objWidth, objHeight) / 2 }
+  //           : { x1: 0, y1: 0, x2: objWidth, y2: 0 },
+  //         colorStops: color.colorStops || [{ offset: 0, color: '#ff6b6b' }, { offset: 1, color: '#4ecdc4' }]
+  //       });
+  //       handleChange('fill', gradient);
+  //     }
+  //   } else {
+  //     // Simple color change for non-SVG
+  //     if (colorPickerType === 'shadow') {
+  //       handleChange('shadowColor', newColor);
+  //     } else {
+  //       handleChange(colorPickerType, newColor);
+  //     }
+  //   }
+  // };
+
+
+
+
+const handleColorChange = (color: string | any) => {
+  if (!colorPickerType || !selectedObject) return;
+  
+  console.log('🎨 Color Change:', { 
+    colorPickerType, 
+    isSVG, 
+    isGradient: typeof color === 'object' && color.type,
+    color 
+  });
+
+  // ========== SVG GRADIENT - CORRECT IMPLEMENTATION ==========
+  if (isSVG && (colorPickerType === 'fill' || colorPickerType === 'svgFill')) {
+    const paths = (selectedObject as any).svgPaths || [];
+    const oldColor = colorPickerColor;
+
+    if (!paths || paths.length === 0) {
+      console.error('❌ No SVG paths found');
+      return;
+    }
+
+    // GRADIENT APPLICATION
+    if (typeof color === 'object' && color.type) {
+      console.log('🌈 Applying gradient to SVG...');
+      
       if (manager && canvas) {
         manager.execute({
           do: () => {
-            let changedCount = 0;
-            paths.forEach((p: any) => {
-              const currentFill = p.fill;
-              console.log('Checking path:', currentFill, 'vs', oldColor);
-              
-              // Flexible color matching (case-insensitive, with/without #)
-              if (
-                currentFill === oldColor ||
-                currentFill?.toLowerCase() === oldColor?.toLowerCase() ||
-                currentFill?.replace('#', '') === oldColor?.replace('#', '')
-              ) {
-                p.set('fill', newColor);
-                (p as any).editableFill = newColor;
-                changedCount++;
-                console.log('Changed path color to:', newColor);
+            paths.forEach((path: any, idx: number) => {
+              try {
+                // Get SVG GROUP dimensions (not individual path)
+                const group = selectedObject as fabric.Group;
+                const groupWidth = (group.width || 100) * (group.scaleX || 1);
+                const groupHeight = (group.height || 100) * (group.scaleY || 1);
+                
+                console.log(`SVG Group size: ${groupWidth}x${groupHeight}`);
+                
+                // Create gradient with GROUP coordinates
+                const gradient = new fabric.Gradient({
+                  type: color.type || 'linear',
+                  coords: color.type === 'radial'
+                    ? { 
+                        x1: groupWidth / 2, 
+                        y1: groupHeight / 2, 
+                        x2: groupWidth / 2, 
+                        y2: groupHeight / 2, 
+                        r1: 0, 
+                        r2: Math.min(groupWidth, groupHeight) / 2 
+                      }
+                    : { 
+                        x1: 0, 
+                        y1: 0, 
+                        x2: groupWidth, 
+                        y2: 0 
+                      },
+                  colorStops: color.colorStops || [
+                    { offset: 0, color: '#ff9a9e' }, 
+                    { offset: 1, color: '#fecfef' }
+                  ],
+                  // ✅ CRITICAL: Use offsetX/offsetY for correct positioning
+                  offsetX: -groupWidth / 2,
+                  offsetY: -groupHeight / 2
+                });
+                
+                path.set('fill', gradient);
+                (path as any).editableFill = 'gradient';
+                
+                console.log(`✅ Path ${idx} gradient applied`);
+              } catch (err) {
+                console.error(`❌ Path ${idx} failed:`, err);
               }
             });
             
-            console.log('Total paths changed:', changedCount);
-            setSvgColors(prev => prev.map(c => 
-              c.color === oldColor || c.color?.toLowerCase() === oldColor?.toLowerCase()
-                ? { ...c, color: newColor } 
-                : c
-            ));
-            setPropsState((prev: any) => ({ ...prev, fill: newColor }));
             canvas.requestRenderAll();
           },
           undo: () => {
-            paths.forEach((p: any) => {
-              if (
-                p.fill === newColor ||
-                p.fill?.toLowerCase() === newColor?.toLowerCase()
-              ) {
-                p.set('fill', oldColor);
-                (p as any).editableFill = oldColor;
+            paths.forEach((path: any) => {
+              if ((path as any).editableFill === 'gradient') {
+                path.set('fill', oldColor);
+                (path as any).editableFill = oldColor;
               }
             });
-            setSvgColors(prev => prev.map(c => 
-              c.color === newColor || c.color?.toLowerCase() === newColor?.toLowerCase()
-                ? { ...c, color: oldColor } 
-                : c
-            ));
-            setPropsState((prev: any) => ({ ...prev, fill: oldColor }));
             canvas.requestRenderAll();
           }
         });
@@ -423,29 +564,86 @@ const [isSVG, setIsSVG] = useState(false);
       return;
     }
 
-    // Regular color / gradient (non-SVG objects)
-    if (typeof color === 'object' && color.type) {
-      if (colorPickerType === 'fill') {
-        const objWidth = (selectedObject?.width ?? 100) * (selectedObject?.scaleX ?? 1);
-        const objHeight = (selectedObject?.height ?? 100) * (selectedObject?.scaleY ?? 1);
-        const gradient = new fabric.Gradient({
-          type: color.type || 'linear',
-          coords: color.type === 'radial'
-            ? { x1: objWidth / 2, y1: objHeight / 2, x2: objWidth / 2, y2: objHeight / 2, r1: 0, r2: Math.min(objWidth, objHeight) / 2 }
-            : { x1: 0, y1: 0, x2: objWidth, y2: 0 },
-          colorStops: color.colorStops || [{ offset: 0, color: '#ff6b6b' }, { offset: 1, color: '#4ecdc4' }]
-        });
-        handleChange('fill', gradient);
-      }
-    } else {
-      // Simple color change for non-SVG
-      if (colorPickerType === 'shadow') {
-        handleChange('shadowColor', newColor);
-      } else {
-        handleChange(colorPickerType, newColor);
-      }
+    // SOLID COLOR APPLICATION
+    const newColor = typeof color === 'object' ? (color.hex || color) : color;
+
+    if (manager && canvas) {
+      manager.execute({
+        do: () => {
+          let changedCount = 0;
+          paths.forEach((path: any) => {
+            const currentFill = path.fill;
+            const currentStr = String(currentFill).toLowerCase();
+            const oldStr = String(oldColor).toLowerCase();
+
+            if (
+              currentStr === oldStr ||
+              currentStr.replace(/#/g, '') === oldStr.replace(/#/g, '')
+            ) {
+              path.set('fill', newColor);
+              (path as any).editableFill = newColor;
+              changedCount++;
+            }
+          });
+          
+          console.log(`✅ Colored ${changedCount} paths`);
+          setSvgColors(prev => prev.map(c => 
+            c.color.toLowerCase() === oldColor.toLowerCase()
+              ? { ...c, color: newColor } 
+              : c
+          ));
+          canvas.requestRenderAll();
+        },
+        undo: () => {
+          paths.forEach((path: any) => {
+            if (String(path.fill).toLowerCase() === String(newColor).toLowerCase()) {
+              path.set('fill', oldColor);
+              (path as any).editableFill = oldColor;
+            }
+          });
+          canvas.requestRenderAll();
+        }
+      });
     }
-  };
+    return;
+  }
+
+  // ========== REGULAR SHAPES - GRADIENT ==========
+  if (typeof color === 'object' && color.type && colorPickerType === 'fill' && !isSVG) {
+    const objWidth = (selectedObject?.width ?? 100) * (selectedObject?.scaleX ?? 1);
+    const objHeight = (selectedObject?.height ?? 100) * (selectedObject?.scaleY ?? 1);
+    
+    const gradient = new fabric.Gradient({
+      type: color.type || 'linear',
+      coords: color.type === 'radial'
+        ? { 
+            x1: objWidth / 2, 
+            y1: objHeight / 2, 
+            x2: objWidth / 2, 
+            y2: objHeight / 2, 
+            r1: 0, 
+            r2: Math.min(objWidth, objHeight) / 2 
+          }
+        : { x1: 0, y1: 0, x2: objWidth, y2: 0 },
+      colorStops: color.colorStops || [
+        { offset: 0, color: '#ff6b6b' }, 
+        { offset: 1, color: '#4ecdc4' }
+      ]
+    });
+    
+    handleChange('fill', gradient);
+    return;
+  }
+
+  // ========== SOLID COLORS ==========
+  const newColor = typeof color === 'object' ? (color.hex || color) : color;
+  
+  if (colorPickerType === 'shadow') {
+    handleChange('shadowColor', newColor);
+  } else {
+    handleChange(colorPickerType, newColor);
+  }
+};
 
   const applyOpacity = (value: number) => {
     if (!selectedObject) return;
@@ -661,9 +859,6 @@ const handleSendToBack = () => {
 {/*  SVG COLORS GROUP - SELECTED OUTLINE */}
 {isSVG && svgColors.length > 0 && (
   <PropertyGroup>
-    {/* <Typography variant="caption" sx={{ fontSize: '10px', color: '#6b7280', mr: 1 }}>
-      SVG Colors:
-    </Typography> */}
     <Box sx={{ display: 'flex', gap: 0.5, overflowX: 'auto', maxWidth: 300 }}>
       {svgColors.map((colorInfo, idx) => {
         const isSelected = colorInfo.color.toLowerCase() === colorPickerColor.toLowerCase();
@@ -671,8 +866,12 @@ const handleSendToBack = () => {
           <Tooltip key={idx} title={`Change ${colorInfo.label}`}>
             <CanvaIconButton
               onClick={() => {
+                console.log('🎨 SVG Color Button Clicked:', colorInfo.color); // Debug
                 setColorPickerColor(colorInfo.color); 
-                if (onOpenColorPicker) onOpenColorPicker('fill', colorInfo.color);
+                // ✅ IMMEDIATE color picker open
+                if (onOpenColorPicker) {
+                  onOpenColorPicker('fill', colorInfo.color);
+                }
               }}
               sx={{
                 backgroundColor: colorInfo.color,
